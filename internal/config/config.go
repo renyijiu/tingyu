@@ -1,4 +1,4 @@
-// Package config reads the Podcast Index credentials.
+// Package config reads and saves the Podcast Index credentials.
 //
 // Precedence, highest first: process environment, a .env file in the working
 // directory, then config.json in the data directory.
@@ -26,6 +26,29 @@ type Config struct {
 	PodcastIndexSecret string `json:"podcastIndexSecret"`
 }
 
+// Settings keeps editable local credentials separate from launch overrides.
+type Settings struct {
+	Saved     Config
+	Overrides Config
+}
+
+func (s Settings) Effective() Config {
+	return Config{
+		PodcastIndexKey:    pick(s.Overrides.PodcastIndexKey, "", s.Saved.PodcastIndexKey),
+		PodcastIndexSecret: pick(s.Overrides.PodcastIndexSecret, "", s.Saved.PodcastIndexSecret),
+	}
+}
+
+func (s Settings) HasOverrides() bool {
+	return s.Overrides.PodcastIndexKey != "" || s.Overrides.PodcastIndexSecret != ""
+}
+
+func (c Config) Normalized() Config {
+	c.PodcastIndexKey = strings.TrimSpace(c.PodcastIndexKey)
+	c.PodcastIndexSecret = strings.TrimSpace(c.PodcastIndexSecret)
+	return c
+}
+
 // Ready reports whether Podcast Index can be called.
 func (c Config) Ready() bool {
 	return strings.TrimSpace(c.PodcastIndexKey) != "" && strings.TrimSpace(c.PodcastIndexSecret) != ""
@@ -34,24 +57,63 @@ func (c Config) Ready() bool {
 // Load reads config.json from dir, then applies .env and the environment.
 // A missing file is not an error.
 func Load(dir string) (Config, error) {
-	var cfg Config
+	s, err := LoadSettings(dir)
+	return s.Effective(), err
+}
+
+// LoadSettings preserves the saved values so editing settings never copies
+// environment credentials into the local file.
+func LoadSettings(dir string) (Settings, error) {
+	var s Settings
 	path := filepath.Join(dir, FileName)
 	b, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return cfg, err
+		return s, err
 	}
 	if err == nil && len(strings.TrimSpace(string(b))) > 0 {
-		if err := json.Unmarshal(b, &cfg); err != nil {
-			return cfg, err
+		if err := json.Unmarshal(b, &s.Saved); err != nil {
+			return s, err
 		}
 	}
 	fileEnv, err := parseEnvFile(".env")
 	if err != nil {
-		return cfg, err
+		return s, err
 	}
-	cfg.PodcastIndexKey = pick(os.Getenv(EnvKey), fileEnv[EnvKey], cfg.PodcastIndexKey)
-	cfg.PodcastIndexSecret = pick(os.Getenv(EnvSecret), fileEnv[EnvSecret], cfg.PodcastIndexSecret)
-	return cfg, nil
+	s.Saved = s.Saved.Normalized()
+	s.Overrides = Config{
+		PodcastIndexKey:    pick(os.Getenv(EnvKey), fileEnv[EnvKey], ""),
+		PodcastIndexSecret: pick(os.Getenv(EnvSecret), fileEnv[EnvSecret], ""),
+	}
+	return s, nil
+}
+
+// Save replaces the local configuration only after a complete private file
+// has been written. Empty credentials remove the locally saved key and secret.
+func Save(dir string, cfg Config) error {
+	cfg = cfg.Normalized()
+	if (cfg.PodcastIndexKey == "") != (cfg.PodcastIndexSecret == "") {
+		return errors.New("请同时填写 API Key 和 API Secret，或将两项都清空")
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	body, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".config-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.Write(append(body, '\n')); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), filepath.Join(dir, FileName))
 }
 
 // WriteTemplate creates an empty config.json when the user does not have one yet.

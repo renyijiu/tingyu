@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/renyijiu/tingyu/internal/app"
+	"github.com/renyijiu/tingyu/internal/config"
 	"github.com/renyijiu/tingyu/internal/model"
 	"github.com/renyijiu/tingyu/internal/player"
 )
@@ -26,6 +27,12 @@ type View struct {
 	home       bool
 	recent     []recentPlay
 	libraryErr error
+
+	settingsOpen    bool
+	settingsDraft   config.Config
+	showCredentials bool
+	settingsErr     string
+	settingsMessage string
 }
 
 type recentPlay struct {
@@ -57,6 +64,7 @@ func (v *View) Build(c *ui.Context) {
 			v.miniPlayer(c, p, st)
 		}
 	})
+	v.settings(c)
 }
 
 func (v *View) stage(c *ui.Context, p palette, st player.State, reduce bool) {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/renyijiu/tingyu/internal/catalog"
+	"github.com/renyijiu/tingyu/internal/config"
 	"github.com/renyijiu/tingyu/internal/model"
 	"github.com/renyijiu/tingyu/internal/player"
 	"github.com/renyijiu/tingyu/internal/store"
@@ -15,11 +16,14 @@ import (
 
 // App is the model the window draws.
 type App struct {
-	Store   *store.Store
-	Catalog *catalog.Catalog
-	Player  *player.Controller
+	Store    *store.Store
+	Catalog  *catalog.Catalog
+	Player   *player.Controller
+	Settings config.Settings
 
-	// Notice is a startup message, such as a missing Podcast Index key.
+	settingsDir string
+
+	// Notice explains the current search configuration.
 	Notice string
 
 	// Sync runs background work inline. Tests set it.
@@ -66,8 +70,9 @@ func (a *App) Search() {
 	a.Searching = true
 	a.SearchErr = ""
 	gen := a.searchGen
+	cat := a.Catalog
 	a.async(func() {
-		shows, src, err := a.Catalog.Search(context.Background(), q)
+		shows, src, err := cat.Search(context.Background(), q)
 		a.publish(func() {
 			if gen != a.searchGen {
 				return
@@ -96,8 +101,9 @@ func (a *App) Open(p model.Podcast) {
 	a.Loading = true
 	a.openGen++
 	gen := a.openGen
+	cat := a.Catalog
 	a.async(func() {
-		eps, err := a.Catalog.Episodes(context.Background(), p)
+		eps, err := cat.Episodes(context.Background(), p)
 		a.publish(func() {
 			if gen != a.openGen {
 				return

@@ -17,7 +17,9 @@ An open-source macOS podcast client written in Go.
 
 到 [Podcast Index](https://api.podcastindex.org/) 申请免费的 API key 和 secret。没有密钥也可以打开应用，搜索会使用 iTunes。
 
-任选一种方式，环境变量优先于 `.env`，`.env` 优先于配置文件：
+打开侧栏底部的齿轮「设置」，或选择菜单「听宇 → 设置…」（快捷键 `⌘,`），填写 **API Key** 和 **API Secret**，点击「保存」即可。两项默认隐藏，保存后立即用于后续搜索，无需重启。将两项都清空并保存可移除本机密钥，恢复使用 iTunes（存在环境覆盖时除外）。保存只确认本机写入成功，不验证密钥是否有效。
+
+密钥以仅当前用户可读写的权限保存在本机 `config.json` 中。也兼容下面的配置方式：环境变量优先于 `.env`，`.env` 优先于应用内设置和配置文件；有环境覆盖时设置窗口会提示，且不会把环境中的密钥复制到本机配置。
 
 ```bash
 export PODCASTINDEX_API_KEY="你的 key"
@@ -26,7 +28,7 @@ export PODCASTINDEX_API_SECRET="你的 secret"
 
 或者在项目目录放一个不会被提交的 `.env`（可从 `.env.example` 复制）。
 
-或者编辑数据目录里的 `config.json`。macOS 上这个目录是：
+也可以手动编辑数据目录里的 `config.json`。macOS 上这个文件是：
 
 ```text
 ~/Library/Application Support/Tingyu/config.json

@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"path/filepath"
@@ -23,7 +22,6 @@ import (
 	"github.com/renyijiu/tingyu/internal/paths"
 	"github.com/renyijiu/tingyu/internal/player"
 	"github.com/renyijiu/tingyu/internal/player/mygoengine"
-	"github.com/renyijiu/tingyu/internal/podcastindex"
 	"github.com/renyijiu/tingyu/internal/store"
 	tingui "github.com/renyijiu/tingyu/internal/ui"
 )
@@ -36,7 +34,7 @@ func main() {
 	if err := config.WriteTemplate(dir); err != nil {
 		log.Fatal(err)
 	}
-	cfg, err := config.Load(dir)
+	settings, err := config.LoadSettings(dir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -44,11 +42,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("无法读取订阅库 %s: %v", filepath.Join(dir, "library.json"), err)
 	}
-	var index catalog.Index
-	if cfg.Ready() {
-		index = &podcastindex.Client{Key: cfg.PodcastIndexKey, Secret: cfg.PodcastIndexSecret}
-	}
-	cat := &catalog.Catalog{Index: index, ITunes: &itunes.Client{}, Feeds: &feed.Fetcher{}}
+	cat := &catalog.Catalog{ITunes: &itunes.Client{}, Feeds: &feed.Fetcher{}}
 	playback := &player.Controller{
 		Engine: mygoengine.New(),
 		Open: func(ctx context.Context, audioURL string) (io.ReadSeeker, error) {
@@ -59,16 +53,11 @@ func main() {
 		},
 	}
 	application := app.New(lib, cat, playback)
+	application.Configure(dir, settings)
 	playback.OnChange = func() {
 		if application.OnUI != nil {
 			application.OnUI(func() {})
 		}
-	}
-	if !cfg.Ready() {
-		application.Notice = fmt.Sprintf(
-			"未配置 Podcast Index。搜索会使用 iTunes。请设置环境变量 %s 和 %s，或填写 %s。",
-			config.EnvKey, config.EnvSecret, filepath.Join(dir, config.FileName),
-		)
 	}
 	view := &tingui.View{App: application}
 	mygo.App.WhenReady(func() {
@@ -82,6 +71,27 @@ func main() {
 			Content:   ui.View(view.Build),
 		})
 		application.OnUI = func(fn func()) { win.Update(fn) }
+		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
+			{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
+				{Role: mygo.RoleAbout},
+				mygo.Separator(),
+				{Label: "设置…", Accelerator: "CmdOrCtrl+,", Click: func(*mygo.MenuItem, *mygo.Window) {
+					win.Update(view.OpenSettings)
+				}},
+				mygo.Separator(),
+				{Role: mygo.RoleServices},
+				mygo.Separator(),
+				{Role: mygo.RoleHide},
+				{Role: mygo.RoleHideOthers},
+				{Role: mygo.RoleUnhide},
+				mygo.Separator(),
+				{Role: mygo.RoleQuit},
+			}},
+			{Role: mygo.RoleFileMenu},
+			{Role: mygo.RoleEditMenu},
+			{Role: mygo.RoleViewMenu},
+			{Role: mygo.RoleWindowMenu},
+		}))
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)

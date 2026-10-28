@@ -16,22 +16,27 @@ func (v *View) sidebar(c *ui.Context, p palette, st player.State) {
 			v.home = true
 			v.expanded = false
 		})
+		ui.Scroll(c.Key("library")).Grow(1).FillWidth().Children(func() {
+			ui.Column(c).FillWidth().Gap(6).Children(func() {
+				ui.Text(c, "我的订阅").FontSize(12).Bold().TextColor(p.muted).Padding(14, 8, 4, 8)
+				if len(v.App.Subs) == 0 {
+					ui.Text(c, "还没有订阅").FontSize(12).TextColor(p.faint).Padding(2, 8)
+				} else {
+					ui.List(c, &v.subs, len(v.App.Subs), func(i int) {
+						v.subRow(c, p, v.App.Subs[i])
+					}).MaxHeight(280)
+				}
 
-		ui.Text(c, "我的订阅").FontSize(12).Bold().TextColor(p.muted).Padding(14, 8, 4, 8)
-		if len(v.App.Subs) == 0 {
-			ui.Text(c, "还没有订阅").FontSize(12).TextColor(p.faint).Padding(2, 8)
-		} else {
-			ui.List(c, &v.subs, len(v.App.Subs), func(i int) {
-				v.subRow(c, p, v.App.Subs[i])
-			}).MaxHeight(280)
-		}
-
-		if len(v.recent) > 0 {
-			ui.Text(c, "最近播放").FontSize(12).Bold().TextColor(p.muted).Padding(14, 8, 4, 8)
-			for _, item := range v.recent {
-				v.recentRow(c, p, st, item)
-			}
-		}
+				if len(v.recent) > 0 {
+					ui.Text(c, "最近播放").FontSize(12).Bold().TextColor(p.muted).Padding(14, 8, 4, 8)
+					for _, item := range v.recent {
+						v.recentRow(c, p, st, item)
+					}
+				}
+			})
+		})
+		ui.Divider(c)
+		v.settingsEntry(c, p)
 	})
 }
 
