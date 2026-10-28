@@ -22,6 +22,7 @@ var (
 	nebulaViolet = nebula.Uniform("Violet")
 	nebulaCyan   = nebula.Uniform("Cyan")
 	nebulaLight  = nebula.Uniform("Light")
+	nebulaPulse  = nebula.Uniform("Pulse")
 )
 
 // nebulaScale is how much smaller than the window the clouds are drawn:
@@ -40,10 +41,10 @@ type cosmos struct {
 	canvas *ui.Canvas
 	values *shader.Values
 	drawn  struct {
-		t, energy float32
-		w, h      int
-		tint      ui.Color
-		light     bool
+		t, energy, pulse float32
+		w, h             int
+		tint             ui.Color
+		light            bool
 	}
 	stars []star
 }
@@ -71,7 +72,7 @@ func (s *cosmos) at(now time.Time) float64 {
 }
 
 // paint draws the sky in r: the clouds, then the stars over them.
-func (s *cosmos) paint(p *ui.Painter, r ui.Rect, pal palette, tint ui.Color, energy float32) {
+func (s *cosmos) paint(p *ui.Painter, r ui.Rect, pal palette, tint ui.Color, energy, pulse float32) {
 	if !p.Accelerated() {
 		// Without a GPU (and in tests) a gradient stands in for the clouds.
 		p.Fill(r, pal.void, 0)
@@ -97,8 +98,8 @@ func (s *cosmos) paint(p *ui.Painter, r ui.Rect, pal palette, tint ui.Color, ene
 	if s.values == nil {
 		s.values = nebula.NewValues()
 	}
-	if s.drawn.t != t || s.drawn.energy != energy || s.drawn.tint != tint || s.drawn.light != !pal.dark {
-		s.drawn.t, s.drawn.energy, s.drawn.tint, s.drawn.light = t, energy, tint, !pal.dark
+	if s.drawn.t != t || s.drawn.energy != energy || s.drawn.pulse != pulse || s.drawn.tint != tint || s.drawn.light != !pal.dark {
+		s.drawn.t, s.drawn.energy, s.drawn.pulse, s.drawn.tint, s.drawn.light = t, energy, pulse, tint, !pal.dark
 		light := float32(0)
 		if !pal.dark {
 			light = 1
@@ -106,7 +107,7 @@ func (s *cosmos) paint(p *ui.Painter, r ui.Rect, pal palette, tint ui.Color, ene
 		s.values.Float(nebulaTime, t).Float(nebulaEnergy, energy).
 			Color(nebulaBase, pal.void).Color(nebulaTint, tint).
 			Color(nebulaViolet, pal.accent).Color(nebulaCyan, pal.cyan).
-			Float(nebulaLight, light)
+			Float(nebulaLight, light).Float(nebulaPulse, pulse)
 		s.canvas.Draw(p, func(cp *ui.Painter) {
 			nebula.Draw(cp, ui.Rect{W: float32(w), H: float32(h)}, shader.Options{Values: s.values})
 		})
@@ -150,4 +151,29 @@ func (s *cosmos) paintStars(p *ui.Painter, r ui.Rect, now time.Time) {
 		}
 		p.Fill(ui.Rect{X: x - st.size/2, Y: y - st.size/2, W: st.size, H: st.size}, ui.RGBA(255, 255, 255, a), st.size/2)
 	}
+}
+
+// voice follows the loudness of what plays as a meter's needle does:
+// up at once with a word, down slowly in the pause after it.
+type voice struct {
+	level float32
+	at    time.Time
+}
+
+func (s *voice) follow(now time.Time, target float32) float32 {
+	dt := now.Sub(s.at).Seconds()
+	if dt == 0 {
+		return s.level
+	}
+	s.at = now
+	if dt < 0 || dt > 0.5 {
+		s.level = target
+		return s.level
+	}
+	k := 0.25
+	if target > s.level {
+		k = 0.03
+	}
+	s.level += (target - s.level) * float32(1-math.Exp(-dt/k))
+	return s.level
 }

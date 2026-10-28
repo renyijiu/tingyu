@@ -21,6 +21,7 @@ type View struct {
 
 	art        *artCache
 	sky        cosmos
+	voice      voice
 	episodes   ui.ListState
 	grid       ui.GridState
 	seek       float64
@@ -69,7 +70,7 @@ func (v *View) Build(c *ui.Context) {
 		energy = 1
 	}
 	energy = root.AnimateTo("energy", energy, ui.Animation{Duration: 1500 * time.Millisecond, Ease: ui.EaseInOut})
-	root.Draw(func(pt *ui.Painter, r ui.Rect) { v.sky.paint(pt, r, p, tint, energy) })
+	root.Draw(func(pt *ui.Painter, r ui.Rect) { v.sky.paint(pt, r, p, tint, energy, v.loudness(pt, reduce)) })
 	root.Children(func() {
 		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
 			v.sidebar(c, p, st, reduce)
@@ -197,4 +198,14 @@ func breathe(c *ui.Context, e ui.Element, playing, reduce bool) {
 		scale = 1.025
 	}
 	e.AnimatePose(ui.Pose{Scale: scale}, ui.Animation{Duration: half, Ease: ui.EaseInOut})
+}
+
+// loudness is how loud what plays is now, smoothed, or 0 when the engine
+// cannot tell, motion is reduced or nothing plays.
+func (v *View) loudness(pt *ui.Painter, reduce bool) float32 {
+	level, ok := v.App.Player.Level()
+	if !ok || reduce {
+		level = 0
+	}
+	return v.voice.follow(pt.Now(), level)
 }

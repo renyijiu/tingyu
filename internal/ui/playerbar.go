@@ -168,7 +168,8 @@ func (v *View) nowPlaying(c *ui.Context, p palette, st player.State, reduce bool
 	ui.Column(c).Grow(1).FillWidth().Center().Gap(18).Padding(0, 36, 28, 36).Children(func() {
 		orbit := planet + 76
 		ui.Box(c).Size(orbit, orbit).Center().Draw(func(pt *ui.Painter, r ui.Rect) {
-			drawHalo(pt, r, p, tint, planet, st, reduce)
+			_, live := v.App.Player.Level()
+			drawHalo(pt, r, p, tint, planet, st, reduce, live, v.loudness(pt, reduce))
 		}).Children(func() {
 			art := ui.Box(c).Radius(planet/2).Shadow(0, 20, 60, 0, tint.Alpha(0.45))
 			breathe(c, art, st.Playing, reduce)
@@ -201,9 +202,10 @@ func (v *View) nowPlaying(c *ui.Context, p palette, st player.State, reduce bool
 	})
 }
 
-// drawHalo draws around the planet: a halo of bars rising and falling as
-// a voice would, the orbit of the episode's progress, and its moon.
-func drawHalo(pt *ui.Painter, r ui.Rect, p palette, tint ui.Color, planet float32, st player.State, reduce bool) {
+// drawHalo draws around the planet: a halo of bars rising and falling with
+// the voice (live, at its loudness level; otherwise as a voice would), the
+// orbit of the episode's progress, and its moon.
+func drawHalo(pt *ui.Painter, r ui.Rect, p palette, tint ui.Color, planet float32, st player.State, reduce, live bool, level float32) {
 	cx, cy := r.X+r.W/2, r.Y+r.H/2
 	moving := st.Playing && !reduce && pt.Accelerated()
 	t := 0.0
@@ -212,20 +214,24 @@ func drawHalo(pt *ui.Painter, r ui.Rect, p palette, tint ui.Color, planet float3
 		pt.AnimationFrameRate(60)
 	}
 	// The halo: bars around the planet, their lengths a few slow waves
-	// folded together, so it seems to speak.
+	// folded together, as tall as the voice is loud.
+	gain := 1.0
+	if live {
+		gain = 0.3 + 1.5*float64(level)
+	}
 	const bars = 96
 	inner := planet/2 + 10
 	for i := 0; i < bars; i++ {
 		a := float64(i) / bars * 2 * math.Pi
 		w := math.Sin(a*3+t*2.1)*0.5 + math.Sin(a*5-t*3.3)*0.3 + math.Sin(a*11+t*5.7)*0.2
-		lv := 0.25 + 0.75*math.Abs(w)
+		lv := min((0.25+0.75*math.Abs(w))*gain, 1.6)
 		if !st.Playing {
 			lv *= 0.35
 		}
 		l := float32(lv) * 14
 		x0, y0 := cx+inner*float32(math.Cos(a)), cy+inner*float32(math.Sin(a))
 		x1, y1 := cx+(inner+l)*float32(math.Cos(a)), cy+(inner+l)*float32(math.Sin(a))
-		col := tint.Mix(p.cyan, float32(0.5+0.5*math.Sin(a*2+t*0.6))*0.5).Alpha(0.25 + 0.5*float32(lv))
+		col := tint.Mix(p.cyan, float32(0.5+0.5*math.Sin(a*2+t*0.6))*0.5).Alpha(min(0.25+0.5*float32(lv), 0.9))
 		pt.Line(x0, y0, x1, y1, 2, col)
 	}
 	// The orbit, and the part of it the episode has come.

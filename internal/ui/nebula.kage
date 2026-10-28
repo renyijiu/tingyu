@@ -17,6 +17,9 @@ var Tint vec4
 var Violet vec4
 var Cyan vec4
 
+// Pulse is the loudness of what plays, 0 to 1: the clouds glow with it.
+var Pulse float
+
 // Light is 1 in the light theme, where the clouds are a pale wash.
 var Light float
 
@@ -61,7 +64,7 @@ func Fragment(dst vec4, pos vec2) vec4 {
 	glow := 0.55*exp(-3.2*dot(frame-vec2(0.82, 0.12), frame-vec2(0.82, 0.12))) +
 		0.4*exp(-4.5*dot(frame-vec2(0.15, 0.95), frame-vec2(0.15, 0.95)))
 
-	strength := (0.55 + 0.25*Energy) * (0.45 + 0.9*glow)
+	strength := (0.55 + 0.25*Energy) * (0.45 + 0.9*glow) * (1 + 0.45*Pulse)
 	if Light > 0.5 {
 		strength *= 0.55
 	}
