@@ -5,7 +5,9 @@ package version
 const Version = "0.1.0"
 
 // UserAgent identifies this app. Podcast Index rejects requests that do not
-// send a specific product name.
+// send a specific product name. The repository is named without its host:
+// the CDN in front of 小宇宙's feeds (feed.xyzfm.space) answers 403 to any
+// User-Agent that contains "github.com".
 func UserAgent() string {
-	return "Tingyu/" + Version + " (+https://github.com/renyijiu/tingyu)"
+	return "Tingyu/" + Version + " (renyijiu/tingyu)"
 }
