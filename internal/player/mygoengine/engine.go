@@ -1,8 +1,10 @@
-// Package mygoengine plays audio with MyGo. It is the only package that
-// imports the audio engine, so the rest of the player can be tested without one.
+// Package mygoengine plays audio with MyGo. It and its m4a decoder are the
+// only packages that import the audio engine, so the rest of the player can
+// be tested without one.
 package mygoengine
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -11,6 +13,7 @@ import (
 	_ "github.com/egoist/mygo/audio/mp3"
 
 	"github.com/renyijiu/tingyu/internal/player"
+	_ "github.com/renyijiu/tingyu/internal/player/mygoengine/m4a"
 )
 
 // Engine opens streams through package audio.
@@ -22,18 +25,15 @@ func New() *Engine {
 	return &Engine{}
 }
 
-// Open decodes r. MP3 is registered; WAV is built in. Other formats return an error.
+// Open decodes r. MP3 and M4A (AAC) are registered; WAV is built in.
+// Other formats return an error.
 func (e *Engine) Open(r io.ReadSeeker, _ player.Meta) (player.Handle, error) {
 	d, _, err := audio.NewDecoder(r)
 	if err != nil {
-		return nil, fmt.Errorf("无法解码音频（当前支持 MP3 和 WAV）：%w", err)
+		return nil, fmt.Errorf("无法解码音频（当前支持 MP3、M4A 和 WAV）：%w", err)
 	}
 	m := &metered{Decoder: d}
-	var dec audio.Decoder = m
-	if c, ok := r.(io.Closer); ok {
-		dec = closing{m, c}
-	}
-	return &handle{p: audio.NewPlayer(dec), m: m, rate: d.SampleRate()}, nil
+	return &handle{p: audio.NewPlayer(closing{m, r}), m: m, rate: d.SampleRate()}, nil
 }
 
 // metered passes the decoded samples on, measuring their loudness on the
@@ -58,9 +58,23 @@ func (m *metered) SetPosition(frame int64) error {
 	return err
 }
 
+// closing is what the player closes when it is done with the stream. The
+// source goes first: that ends a download a decode may be waiting on.
+// Then the decoder, which for M4A holds AudioToolbox's file.
 type closing struct {
 	*metered
-	io.Closer
+	src io.ReadSeeker
+}
+
+func (c closing) Close() error {
+	var err error
+	if cl, ok := c.src.(io.Closer); ok {
+		err = cl.Close()
+	}
+	if cl, ok := c.Decoder.(io.Closer); ok {
+		err = errors.Join(err, cl.Close())
+	}
+	return err
 }
 
 type handle struct {
