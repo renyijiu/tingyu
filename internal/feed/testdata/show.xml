@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>故事会</title>
+    <link>https://example.com/show</link>
+    <description><![CDATA[<p>中文播客</p>]]></description>
+    <itunes:author>主播甲</itunes:author>
+    <itunes:image href="https://example.com/cover.jpg"/>
+    <item>
+      <title>较新的一集</title>
+      <itunes:duration>12:34</itunes:duration>
+      <guid>new</guid>
+      <pubDate>Tue, 03 Jan 2023 00:00:00 GMT</pubDate>
+      <enclosure url="https://cdn.example.com/new.mp3" type="audio/mpeg" length="10"/>
+      <description><![CDATA[<p>你好&amp;世界</p>]]></description>
+    </item>
+    <item>
+      <title>没有音频的公告</title>
+      <guid>skip</guid>
+      <description>skip me</description>
+    </item>
+    <item>
+      <title>较早的一集</title>
+      <itunes:duration>01:02:03</itunes:duration>
+      <guid isPermaLink="false">old</guid>
+      <pubDate>Mon, 02 Jan 2023 15:04:05 GMT</pubDate>
+      <enclosure url="https://cdn.example.com/notes.pdf" type="application/pdf" length="1"/>
+      <enclosure url="https://cdn.example.com/old.mp3" type="audio/mpeg" length="20"/>
+    </item>
+    <item>
+      <title>只有秒数</title>
+      <itunes:duration>125</itunes:duration>
+      <enclosure url="https://cdn.example.com/sec.mp3" type="audio/mpeg" length="3"/>
+    </item>
+  </channel>
+</rss>

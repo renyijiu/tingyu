@@ -1,0 +1,32 @@
+{
+  "status": "true",
+  "feeds": [
+    {
+      "id": 75075,
+      "title": "故事 FM",
+      "url": "https://example.com/gushi.xml",
+      "link": "https://example.com/gushi",
+      "description": "用声音记录普通人的故事。",
+      "author": "故事 FM",
+      "ownerName": "故事 FM",
+      "image": "https://example.com/image.jpg",
+      "artwork": "https://example.com/art.jpg",
+      "itunesId": 1001,
+      "language": "zh-cn"
+    },
+    {
+      "id": 88,
+      "title": "No Audio Feed",
+      "url": "https://example.com/empty.xml",
+      "description": "second",
+      "author": "",
+      "ownerName": "Owner",
+      "image": "https://example.com/only-image.jpg",
+      "artwork": "",
+      "itunesId": null
+    }
+  ],
+  "count": 2,
+  "query": "故事",
+  "description": "Found matching feeds."
+}

@@ -1,0 +1,22 @@
+{
+  "resultCount": 2,
+  "results": [
+    {
+      "wrapperType": "track",
+      "kind": "podcast",
+      "collectionId": 123456,
+      "collectionName": "故事 FM"
+    },
+    {
+      "wrapperType": "podcastEpisode",
+      "kind": "podcast-episode",
+      "trackId": 99,
+      "trackName": "英文小集",
+      "description": "hello",
+      "episodeUrl": "https://cdn.example.com/en.mp3",
+      "releaseDate": "2024-05-01T12:00:00Z",
+      "trackTimeMillis": 90000,
+      "artworkUrl160": "https://example.com/ep.jpg"
+    }
+  ]
+}

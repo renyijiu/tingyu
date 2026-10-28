@@ -1,0 +1,113 @@
+package store
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/renyijiu/tingyu/internal/model"
+)
+
+func TestSubscriptionsPersist(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	show := model.Podcast{Title: "故事会", FeedURL: "https://example.com/a.xml", Author: "甲"}
+	show.EnsureIDs()
+	if err := s.Subscribe(show); err != nil {
+		t.Fatal(err)
+	}
+	other := model.Podcast{Title: "Serial", FeedURL: "https://example.com/b.xml"}
+	other.EnsureIDs()
+	if err := s.Subscribe(other); err != nil {
+		t.Fatal(err)
+	}
+	if !s.IsSubscribed(show.ID) || len(s.Subscriptions()) != 2 {
+		t.Fatalf("%+v", s.Subscriptions())
+	}
+	if s.Subscriptions()[0].ID != other.ID {
+		t.Fatal("newest subscription should be first")
+	}
+	// Updating keeps the original timestamp and does not duplicate.
+	firstAt := s.Subscriptions()[1].SubscribedAt
+	show.Title = "故事会（更新）"
+	if err := s.Subscribe(show); err != nil {
+		t.Fatal(err)
+	}
+	got := find(t, s.Subscriptions(), show.ID)
+	if got.Title != "故事会（更新）" || !got.SubscribedAt.Equal(firstAt) {
+		t.Fatalf("%+v", got)
+	}
+	if len(s.Subscriptions()) != 2 {
+		t.Fatalf("duplicated: %+v", s.Subscriptions())
+	}
+	if err := s.Unsubscribe(show.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Unsubscribe(show.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	re, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if re.IsSubscribed(show.ID) || len(re.Subscriptions()) != 1 || re.Subscriptions()[0].Title != "Serial" {
+		t.Fatalf("reloaded %+v", re.Subscriptions())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "library.json")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProgress(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := model.EpisodeKey("https://example.com/a.xml", "ep", "https://cdn/a.mp3")
+	if _, ok := s.Progress(key); ok {
+		t.Fatal("unexpected progress")
+	}
+	want := model.Progress{Position: 90 * time.Second, Duration: 30 * time.Minute, Updated: time.Unix(1_700_000_000, 0).UTC()}
+	if err := s.SaveProgress(key, want); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := s.Progress(key)
+	if !ok || got.Position != want.Position || got.Duration != want.Duration {
+		t.Fatalf("%+v %v", got, ok)
+	}
+	dir := s.path
+	re, err := Open(filepath.Dir(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok = re.Progress(key)
+	if !ok || got.Position != want.Position {
+		t.Fatalf("reloaded %+v", got)
+	}
+}
+
+func TestCorruptFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "library.json"), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(dir); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func find(t *testing.T, list []model.Podcast, id string) model.Podcast {
+	t.Helper()
+	for _, p := range list {
+		if p.ID == id {
+			return p
+		}
+	}
+	t.Fatalf("missing %s", id)
+	return model.Podcast{}
+}

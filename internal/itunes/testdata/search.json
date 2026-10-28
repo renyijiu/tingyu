@@ -1,0 +1,22 @@
+{
+  "resultCount": 2,
+  "results": [
+    {
+      "wrapperType": "track",
+      "kind": "podcast",
+      "collectionId": 123456,
+      "collectionName": "故事 FM",
+      "artistName": "故事 FM",
+      "feedUrl": "https://example.com/gushi.xml",
+      "artworkUrl600": "https://example.com/art600.jpg",
+      "artworkUrl100": "https://example.com/art100.jpg",
+      "collectionViewUrl": "https://podcasts.apple.com/cn/podcast/id123456",
+      "trackCount": 20
+    },
+    {
+      "wrapperType": "track",
+      "kind": "song",
+      "collectionName": "ignore me"
+    }
+  ]
+}

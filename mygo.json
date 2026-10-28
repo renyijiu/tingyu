@@ -1,0 +1,17 @@
+{
+  "name": "听宇",
+  "slug": "tingyu",
+  "identifier": "dev.renyijiu.tingyu",
+  "version": "0.1.0",
+  "copyright": "© 2026 renyijiu",
+  "publisher": "renyijiu",
+  "icon": "resources/icon.png",
+  "out": "build",
+  "macos": {
+    "minimumSystemVersion": "13.0"
+  },
+  "linux": {
+    "comment": "开源播客客户端",
+    "categories": ["AudioVideo", "Audio", "Player"]
+  }
+}

@@ -1,0 +1,12 @@
+.mygo/
+build/
+dist/
+
+.env
+.env.local
+config.json
+
+.DS_Store
+*.exe
+*.test
+coverage.out
