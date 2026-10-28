@@ -1,0 +1,27 @@
+{
+  "status": true,
+  "items": [
+    {
+      "id": 5,
+      "title": "第一集",
+      "description": "你好",
+      "guid": "ep-1",
+      "datePublished": 1672671845,
+      "enclosureUrl": "https://cdn.example.com/ep1.mp3",
+      "enclosureType": "audio/mpeg",
+      "duration": 3723,
+      "image": "https://example.com/ep1.jpg",
+      "feedId": 75075
+    },
+    {
+      "id": 6,
+      "title": "没有音频",
+      "guid": "ep-skip",
+      "datePublished": 1670000000,
+      "enclosureUrl": "",
+      "duration": null
+    }
+  ],
+  "count": 2,
+  "description": "Episode list"
+}
