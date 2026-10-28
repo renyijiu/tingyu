@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -98,6 +99,70 @@ func TestCorruptFile(t *testing.T) {
 	}
 	if _, err := Open(dir); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestFailedWriteKeepsLibraryUnchanged(t *testing.T) {
+	for _, operation := range []string{"subscribe", "update", "unsubscribe", "progress"} {
+		t.Run(operation, func(t *testing.T) {
+			dir := t.TempDir()
+			s, err := Open(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			show := model.Podcast{ID: "original", Title: "Original"}
+			if err := s.Subscribe(show); err != nil {
+				t.Fatal(err)
+			}
+			progress := model.Progress{Position: time.Minute}
+			if err := s.SaveProgress("episode", progress); err != nil {
+				t.Fatal(err)
+			}
+			before := s.Subscriptions()
+			beforeProgress, _ := s.Progress("episode")
+			// A directory at the temporary file path deterministically fails writes.
+			if err := os.Mkdir(s.path+".tmp", 0o700); err != nil {
+				t.Fatal(err)
+			}
+			switch operation {
+			case "subscribe":
+				err = s.Subscribe(model.Podcast{ID: "new", Title: "New"})
+			case "update":
+				show.Title = "Changed"
+				err = s.Subscribe(show)
+			case "unsubscribe":
+				err = s.Unsubscribe(show.ID)
+			case "progress":
+				progress.Position = 2 * time.Minute
+				err = s.SaveProgress("episode", progress)
+			}
+			if err == nil {
+				t.Fatal("expected a write failure")
+			}
+			if got := s.Subscriptions(); !reflect.DeepEqual(got, before) {
+				t.Errorf("failed write changed subscriptions: got %+v, want %+v", got, before)
+			}
+			if got, _ := s.Progress("episode"); got != beforeProgress {
+				t.Errorf("failed write changed progress: got %+v, want %+v", got, beforeProgress)
+			}
+			if err := os.Remove(s.path + ".tmp"); err != nil {
+				t.Fatal(err)
+			}
+			// A later successful write must not commit a previously failed mutation.
+			if err := s.SaveProgress("other", model.Progress{Position: time.Second}); err != nil {
+				t.Fatal(err)
+			}
+			reopened, err := Open(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := reopened.Subscriptions(); !reflect.DeepEqual(got, before) {
+				t.Errorf("later write persisted failed subscription change: %+v", got)
+			}
+			if got, _ := reopened.Progress("episode"); got != beforeProgress {
+				t.Errorf("later write persisted failed progress change: %+v", got)
+			}
+		})
 	}
 }
 

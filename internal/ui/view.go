@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/renyijiu/tingyu/internal/app"
+	"github.com/renyijiu/tingyu/internal/config"
 	"github.com/renyijiu/tingyu/internal/model"
 	"github.com/renyijiu/tingyu/internal/player"
 )
@@ -17,14 +18,21 @@ import (
 type View struct {
 	App *app.App
 
-	art      *artCache
-	subs     ui.ListState
-	episodes ui.ListState
-	grid     ui.GridState
-	seek     float64
-	expanded bool
-	home     bool
-	recent   []recentPlay
+	art        *artCache
+	subs       ui.ListState
+	episodes   ui.ListState
+	grid       ui.GridState
+	seek       float64
+	expanded   bool
+	home       bool
+	recent     []recentPlay
+	libraryErr error
+
+	settingsOpen    bool
+	settingsDraft   config.Config
+	showCredentials bool
+	settingsErr     string
+	settingsMessage string
 }
 
 type recentPlay struct {
@@ -47,6 +55,7 @@ func (v *View) Build(c *ui.Context) {
 		if v.App.Notice != "" {
 			ui.Text(c, v.App.Notice).Padding(8, 20).FontSize(12).TextColor(p.muted)
 		}
+		v.playbackStatus(c, p, st)
 		ui.Row(c).Grow(1).Children(func() {
 			v.sidebar(c, p, st)
 			v.stage(c, p, st, reduce)
@@ -55,6 +64,7 @@ func (v *View) Build(c *ui.Context) {
 			v.miniPlayer(c, p, st)
 		}
 	})
+	v.settings(c)
 }
 
 func (v *View) stage(c *ui.Context, p palette, st player.State, reduce bool) {

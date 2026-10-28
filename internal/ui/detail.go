@@ -39,6 +39,9 @@ func (v *View) detail(c *ui.Context, p palette, st player.State, reduce bool) {
 						ui.Text(c, desc).MaxLines(3).TextColor(p.muted)
 					}
 					v.subscribeButton(c, p, show)
+					if v.libraryErr != nil {
+						ui.Text(c, "无法保存订阅："+v.libraryErr.Error()).TextColor(c.Theme().Danger)
+					}
 				})
 			})
 			if v.App.Loading {
@@ -81,9 +84,9 @@ func (v *View) subscribeButton(c *ui.Context, p palette, show model.Podcast) {
 	})
 	if btn.Clicked() {
 		if on {
-			_ = v.App.Unsubscribe(show.ID)
+			v.libraryErr = v.App.Unsubscribe(show.ID)
 		} else {
-			_ = v.App.Subscribe(show)
+			v.libraryErr = v.App.Subscribe(show)
 		}
 	}
 }

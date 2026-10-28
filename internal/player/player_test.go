@@ -57,7 +57,7 @@ func TestPlayPauseSeekSaves(t *testing.T) {
 		Open: func(context.Context, string) (io.ReadSeeker, error) {
 			return mem{bytes.NewReader([]byte("x"))}, nil
 		},
-		Save: func(key string, pos, dur time.Duration) {
+		Save: func(key string, pos, dur time.Duration) error {
 			if key != "ep-1" {
 				t.Errorf("key %s", key)
 			}
@@ -65,6 +65,7 @@ func TestPlayPauseSeekSaves(t *testing.T) {
 				t.Errorf("dur %v", dur)
 			}
 			saved = append(saved, pos)
+			return nil
 		},
 		Now: func() time.Time { return now },
 	}
@@ -169,6 +170,7 @@ func TestPlayErrorAndStaleOpen(t *testing.T) {
 
 	started := make(chan struct{})
 	release := make(chan struct{})
+	done := make(chan struct{})
 	eng.err = nil
 	c.Open = func(_ context.Context, audioURL string) (io.ReadSeeker, error) {
 		if strings.Contains(audioURL, "slow") {
@@ -177,19 +179,74 @@ func TestPlayErrorAndStaleOpen(t *testing.T) {
 		}
 		return mem{bytes.NewReader([]byte("a"))}, nil
 	}
-	go c.Play(context.Background(), "show", model.Episode{ID: "slow", Title: "慢", AudioURL: "https://cdn/slow.mp3"}, time.Second)
+	go func() {
+		c.Play(context.Background(), "show", model.Episode{ID: "slow", Title: "慢", AudioURL: "https://cdn/slow.mp3"}, time.Second)
+		close(done)
+	}()
 	<-started
 	c.Play(context.Background(), "show", model.Episode{ID: "fast", Title: "快", AudioURL: "https://cdn/fast.mp3"}, 0)
 	close(release)
-	// Let the slow open finish and drop itself.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if c.State().Episode != nil && c.State().Episode.ID == "fast" && c.State().Playing {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	// Wait for the stale request to finish before checking the final state.
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stale open did not finish")
 	}
-	t.Fatalf("stale open won: %+v", c.State())
+	if st := c.State(); st.Episode == nil || st.Episode.ID != "fast" || !st.Playing {
+		t.Fatalf("stale open won: %+v", st)
+	}
+	if eng.n != 2 { // Initial error and the current episode; the stale source is never decoded.
+		t.Errorf("decoded a stale source: engine opened %d times", eng.n)
+	}
+}
+
+func TestStopCancelsPendingOpen(t *testing.T) {
+	for _, action := range []string{"close", "switch"} {
+		t.Run(action, func(t *testing.T) {
+			started := make(chan context.Context, 1)
+			done := make(chan struct{})
+			ctx, cleanup := context.WithCancel(context.Background())
+			defer cleanup()
+			c := &Controller{
+				Engine: &fakeEngine{},
+				Open: func(ctx context.Context, url string) (io.ReadSeeker, error) {
+					if url == "slow" {
+						started <- ctx
+						<-ctx.Done()
+						return nil, ctx.Err()
+					}
+					return mem{bytes.NewReader(nil)}, nil
+				},
+			}
+			defer c.Close()
+			go func() {
+				c.Play(ctx, "", model.Episode{ID: "slow", AudioURL: "slow"}, 0)
+				close(done)
+			}()
+			pending := <-started
+			if action == "close" {
+				c.Close()
+			} else {
+				c.Play(context.Background(), "", model.Episode{ID: "next", AudioURL: "next"}, 0)
+			}
+			if pending.Err() != context.Canceled {
+				t.Error("previous playback request was not canceled")
+			}
+			cleanup()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("canceled open did not finish")
+			}
+			st := c.State()
+			if st.Buffering || st.Err != nil {
+				t.Fatalf("stale cancellation changed current state: %+v", st)
+			}
+			if action == "switch" && (st.Episode.ID != "next" || !st.Playing) {
+				t.Fatalf("switch did not keep the new episode: %+v", st)
+			}
+		})
+	}
 }
 
 func TestMissingAudio(t *testing.T) {

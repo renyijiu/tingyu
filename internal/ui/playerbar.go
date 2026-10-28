@@ -8,6 +8,17 @@ import (
 	"github.com/renyijiu/tingyu/internal/player"
 )
 
+func (v *View) playbackStatus(c *ui.Context, p palette, st player.State) {
+	if st.Err != nil {
+		ui.Text(c, st.Err.Error()).Padding(8, 20).TextColor(c.Theme().Danger)
+	} else if st.Buffering {
+		ui.Text(c, "正在缓冲…").Padding(8, 20).TextColor(p.muted)
+	}
+	if st.SaveErr != nil {
+		ui.Text(c, "无法保存播放进度："+st.SaveErr.Error()).Padding(8, 20).TextColor(c.Theme().Danger)
+	}
+}
+
 func (v *View) miniPlayer(c *ui.Context, p palette, st player.State) {
 	ui.Row(c).Padding(10, 16).Gap(12).Background(p.sidebar).Border(1, p.line).Children(func() {
 		open := ui.ButtonBase(c.Key("mini-open")).Grow(1).Gap(12).Radius(12).Padding(4, 6)
@@ -79,12 +90,6 @@ func (v *View) nowPlaying(c *ui.Context, p palette, st player.State, reduce bool
 			ui.Text(c, ep.Title).FontSize(28).Bold()
 			if showTitle != "" {
 				ui.Text(c, showTitle).FontSize(15).TextColor(p.muted)
-			}
-			if st.Buffering {
-				ui.Text(c, "正在缓冲…").TextColor(p.muted)
-			}
-			if st.Err != nil {
-				ui.Text(c, st.Err.Error()).TextColor(c.Theme().Danger)
 			}
 		})
 		v.scrubber(c, p, st)
