@@ -54,8 +54,8 @@ func main() {
 		Open: func(ctx context.Context, audioURL string) (io.ReadSeeker, error) {
 			return media.Open(ctx, nil, audioURL, media.CacheDir(dir))
 		},
-		Save: func(key string, pos, dur time.Duration) {
-			_ = lib.SaveProgress(key, model.Progress{Position: pos, Duration: dur})
+		Save: func(key string, pos, dur time.Duration) error {
+			return lib.SaveProgress(key, model.Progress{Position: pos, Duration: dur})
 		},
 	}
 	application := app.New(lib, cat, playback)

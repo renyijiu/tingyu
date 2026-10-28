@@ -54,15 +54,17 @@ func New(st *store.Store, cat *catalog.Catalog, pl *player.Controller) *App {
 
 // Search looks up Query.
 func (a *App) Search() {
+	a.searchGen++
 	q := strings.TrimSpace(a.Query)
 	if q == "" {
+		a.Searching = false
 		a.SearchErr = "请输入关键词"
 		a.Results = nil
+		a.ResultSource = ""
 		return
 	}
 	a.Searching = true
 	a.SearchErr = ""
-	a.searchGen++
 	gen := a.searchGen
 	a.async(func() {
 		shows, src, err := a.Catalog.Search(context.Background(), q)

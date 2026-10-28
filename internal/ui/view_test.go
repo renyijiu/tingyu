@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -85,8 +87,8 @@ func TestViewSearchSubscribeAndPlay(t *testing.T) {
 		Open: func(context.Context, string) (io.ReadSeeker, error) {
 			return bytes.NewReader([]byte("abc")), nil
 		},
-		Save: func(key string, pos, dur time.Duration) {
-			_ = st.SaveProgress(key, model.Progress{Position: pos, Duration: dur})
+		Save: func(key string, pos, dur time.Duration) error {
+			return st.SaveProgress(key, model.Progress{Position: pos, Duration: dur})
 		},
 	})
 	a.Sync = true
@@ -115,11 +117,34 @@ func TestViewSearchSubscribeAndPlay(t *testing.T) {
 	if !tt.HasText("第一集") || !tt.HasText("12:34") {
 		t.Fatalf("episodes %q", tt.Texts())
 	}
+	blockWrites := func() {
+		t.Helper()
+		if err := os.Mkdir(filepath.Join(dir, "library.json.tmp"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	allowWrites := func() {
+		t.Helper()
+		if err := os.Remove(filepath.Join(dir, "library.json.tmp")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	blockWrites()
+	if err := tt.Click("订阅这个节目"); err != nil {
+		t.Fatal(err)
+	}
+	if a.Subscribed(show.ID) || !tt.HasText("无法保存订阅") {
+		t.Errorf("failed subscription should stay unsubscribed and show an error: %q", tt.Texts())
+	}
+	allowWrites()
 	if err := tt.Click("订阅这个节目"); err != nil {
 		t.Fatal(err)
 	}
 	if !a.Subscribed(show.ID) || !tt.HasText("取消订阅") || tt.HasText("还没有订阅") {
 		t.Fatalf("subscribe texts %q subscribed %v", tt.Texts(), a.Subscribed(show.ID))
+	}
+	if tt.HasText("无法保存订阅") {
+		t.Error("successful subscription did not clear the save error")
 	}
 	if err := tt.Click("第一集"); err != nil {
 		t.Fatal(err)
@@ -127,12 +152,34 @@ func TestViewSearchSubscribeAndPlay(t *testing.T) {
 	if !a.Player.State().Playing || !tt.HasText("暂停") {
 		t.Fatalf("playing %v texts %q", a.Player.State().Playing, tt.Texts())
 	}
+	blockWrites()
 	if err := tt.Click("暂停"); err != nil {
 		t.Fatal(err)
 	}
 	if a.Player.State().Playing {
 		t.Fatal("still playing")
 	}
+	if !tt.HasText("无法保存播放进度") {
+		t.Errorf("failed progress save was hidden: %q", tt.Texts())
+	}
+	allowWrites()
+	if err := tt.Click("播放"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("暂停"); err != nil {
+		t.Fatal(err)
+	}
+	if tt.HasText("无法保存播放进度") {
+		t.Error("successful progress save did not clear the error")
+	}
+	blockWrites()
+	if err := tt.Click("取消订阅"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Subscribed(show.ID) || !tt.HasText("无法保存订阅") {
+		t.Errorf("failed unsubscribe should preserve subscription and show an error: %q", tt.Texts())
+	}
+	allowWrites()
 	if err := tt.Click("取消订阅"); err != nil {
 		t.Fatal(err)
 	}

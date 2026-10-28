@@ -2,10 +2,13 @@ package media
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -111,6 +114,58 @@ func TestHTTPError(t *testing.T) {
 	_, err = io.ReadAll(r)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestCanceledDownloadIsNotCached(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var requests atomic.Int32
+	payload := "0123456789abcdefghij"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "20")
+		if requests.Add(1) == 1 {
+			_, _ = io.WriteString(w, payload[:4])
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		_, _ = io.WriteString(w, payload)
+	}))
+	defer func() {
+		cancel()
+		srv.Close()
+	}()
+	dir := t.TempDir()
+	r, err := Open(ctx, srv.Client(), srv.URL, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if _, err := io.ReadFull(r, make([]byte, 4)); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	if _, err := io.ReadAll(r); !errors.Is(err, context.Canceled) {
+		t.Errorf("canceled download returned %v, want context.Canceled", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("canceled download left cache files: %v", entries)
+	}
+	retry, err := Open(context.Background(), srv.Client(), srv.URL, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer retry.Close()
+	got, err := io.ReadAll(retry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != payload || requests.Load() != 2 {
+		t.Errorf("retry reused partial audio: body=%q requests=%d", got, requests.Load())
 	}
 }
 

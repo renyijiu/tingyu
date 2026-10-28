@@ -11,7 +11,7 @@ An open-source macOS podcast client written in Go.
 - 查看一个节目的单集（优先解析它自己的 RSS）
 - 播放单集音频：播放、暂停、拖动进度，并记住每集听到哪里
 
-还没做：小宇宙同步、下载管理、账号。播放时会把音频缓存在数据目录里，方便拖动进度，这不是给用户看的下载列表。当前解码支持 MP3 和 WAV。
+还没做：小宇宙同步、下载管理、账号。播放时会把音频缓存在数据目录里，方便拖动进度，这不是给用户看的下载列表。当前解码支持 MP3 和 WAV。MP3 解码器首次打开时会扫描完整文件，因此可能需要等下载完成才开始播放；已完成的缓存可以复用。切换单集或退出时会取消旧下载，未完成的文件不会作为完整缓存保留。
 
 ## 配置 Podcast Index
 
@@ -52,7 +52,11 @@ go test ./...
 go tool mygo dev
 ```
 
-`go tool mygo dev` 会编译开发版并在改 Go 文件后重启。开发版是一个独立的 app bundle，数据和正式版分开。
+`go tool mygo dev` 会编译开发版并在改 Go 文件后重启。开发版是一个独立的 app bundle，但默认与正式版共用数据目录。开发时可显式隔离数据：
+
+```bash
+TINGYU_DATA_DIR="$HOME/Library/Application Support/Tingyu-Dev" go tool mygo dev
+```
 
 打包：
 
@@ -83,7 +87,7 @@ go build -o tingyu .
 | `internal/feed` | 用 gofeed 解析 RSS |
 | `internal/catalog` | 搜索和单集的来源选择 |
 | `internal/store` | 订阅和播放进度的 JSON 文件 |
-| `internal/media` | 把远端音频当成可 seek 的文件，边下边播 |
+| `internal/media` | 远端音频下载、可 seek 的文件读取和完整缓存复用 |
 | `internal/player` | 播放、暂停、进度记忆；音频引擎是接口 |
 | `internal/player/mygoengine` | 用 mygo `audio` 真正出声 |
 | `internal/app` | 界面背后的状态 |

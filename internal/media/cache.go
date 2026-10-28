@@ -80,9 +80,7 @@ func (r *Reader) download(ctx context.Context, client *http.Client, audioURL str
 	err := r.fetch(ctx, client, audioURL)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err != nil && !errors.Is(err, context.Canceled) {
-		r.err = err
-	}
+	r.err = err
 	r.done = true
 	if r.err == nil && !r.closed {
 		_ = r.file.Sync()

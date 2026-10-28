@@ -18,10 +18,11 @@ import (
 type View struct {
 	App *app.App
 
-	subs     ui.ListState
-	results  ui.ListState
-	episodes ui.ListState
-	seek     float64
+	subs       ui.ListState
+	results    ui.ListState
+	episodes   ui.ListState
+	seek       float64
+	libraryErr error
 }
 
 // Build draws one frame.
@@ -110,10 +111,13 @@ func (v *View) detail(c *ui.Context) {
 		}
 		if v.App.Subscribed(p.ID) {
 			if ui.Button(c, "取消订阅").Clicked() {
-				_ = v.App.Unsubscribe(p.ID)
+				v.libraryErr = v.App.Unsubscribe(p.ID)
 			}
 		} else if ui.PrimaryButton(c, "订阅这个节目").Clicked() {
-			_ = v.App.Subscribe(p)
+			v.libraryErr = v.App.Subscribe(p)
+		}
+		if v.libraryErr != nil {
+			ui.Text(c, "无法保存订阅："+v.libraryErr.Error()).TextColor(t.Danger)
 		}
 		if v.App.Loading {
 			ui.Text(c, "正在加载单集…").TextColor(t.TextMuted)
@@ -149,6 +153,9 @@ func (v *View) transport(c *ui.Context, st player.State) {
 			ui.Text(c, st.Err.Error()).TextColor(t.Danger)
 		} else if st.Buffering {
 			ui.Text(c, "正在缓冲…").TextColor(t.TextMuted)
+		}
+		if st.SaveErr != nil {
+			ui.Text(c, "无法保存播放进度："+st.SaveErr.Error()).TextColor(t.Danger)
 		}
 		ui.Row(c).Gap(12).Children(func() {
 			label := "播放"

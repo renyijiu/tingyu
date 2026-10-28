@@ -83,8 +83,8 @@ func TestSubscribeSearchPlay(t *testing.T) {
 		Open: func(context.Context, string) (io.ReadSeeker, error) {
 			return bytes.NewReader([]byte("abc")), nil
 		},
-		Save: func(key string, pos, dur time.Duration) {
-			_ = st.SaveProgress(key, model.Progress{Position: pos, Duration: dur, Updated: time.Now()})
+		Save: func(key string, pos, dur time.Duration) error {
+			return st.SaveProgress(key, model.Progress{Position: pos, Duration: dur, Updated: time.Now()})
 		},
 	}
 	a := New(st, cat, pl)
@@ -149,5 +149,45 @@ func TestEmptyQuery(t *testing.T) {
 	a.Search()
 	if a.SearchErr == "" {
 		t.Fatal("expected a prompt")
+	}
+}
+
+type searchIndexFunc func(context.Context, string) ([]model.Podcast, error)
+
+func (f searchIndexFunc) Search(ctx context.Context, query string) ([]model.Podcast, error) {
+	return f(ctx, query)
+}
+
+func (searchIndexFunc) Episodes(context.Context, int64) ([]model.Episode, error) {
+	return nil, nil
+}
+
+func TestEmptyQueryDiscardsPendingSearch(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	updates := make(chan func(), 1)
+	a := New(nil, &catalog.Catalog{Index: searchIndexFunc(func(context.Context, string) ([]model.Podcast, error) {
+		close(started)
+		<-release
+		return []model.Podcast{{Title: "旧结果"}}, nil
+	})}, nil)
+	a.OnUI = func(fn func()) { updates <- fn }
+	a.Query = "故事"
+	a.Search()
+	<-started
+	a.Query = " "
+	a.Search()
+	if a.Searching {
+		t.Error("empty query left the old search loading")
+	}
+	close(release)
+	select {
+	case update := <-updates:
+		update()
+	case <-time.After(2 * time.Second):
+		t.Fatal("pending search did not finish")
+	}
+	if len(a.Results) != 0 || a.ResultSource != "" || a.SearchErr != "请输入关键词" {
+		t.Fatalf("old search changed cleared state: results=%+v source=%q error=%q", a.Results, a.ResultSource, a.SearchErr)
 	}
 }

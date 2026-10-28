@@ -4,8 +4,10 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -80,15 +82,17 @@ func (s *Store) Subscribe(p model.Podcast) error {
 	if p.SubscribedAt.IsZero() {
 		p.SubscribedAt = time.Now().UTC()
 	}
+	next := s.data
 	if i := s.index(p.ID); i >= 0 {
 		if !s.data.Subscriptions[i].SubscribedAt.IsZero() {
 			p.SubscribedAt = s.data.Subscriptions[i].SubscribedAt
 		}
-		s.data.Subscriptions[i] = p
+		next.Subscriptions = slices.Clone(s.data.Subscriptions)
+		next.Subscriptions[i] = p
 	} else {
-		s.data.Subscriptions = append([]model.Podcast{p}, s.data.Subscriptions...)
+		next.Subscriptions = append([]model.Podcast{p}, next.Subscriptions...)
 	}
-	return s.saveLocked()
+	return s.saveLocked(next)
 }
 
 // Unsubscribe removes a show. Removing one that is not there succeeds.
@@ -99,8 +103,9 @@ func (s *Store) Unsubscribe(id string) error {
 	if i < 0 {
 		return nil
 	}
-	s.data.Subscriptions = append(s.data.Subscriptions[:i], s.data.Subscriptions[i+1:]...)
-	return s.saveLocked()
+	next := s.data
+	next.Subscriptions = slices.Delete(slices.Clone(s.data.Subscriptions), i, i+1)
+	return s.saveLocked(next)
 }
 
 // Progress returns the saved position for an episode key.
@@ -118,14 +123,16 @@ func (s *Store) SaveProgress(key string, p model.Progress) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.data.Progress == nil {
-		s.data.Progress = map[string]model.Progress{}
+	next := s.data
+	next.Progress = maps.Clone(s.data.Progress)
+	if next.Progress == nil {
+		next.Progress = map[string]model.Progress{}
 	}
 	if p.Updated.IsZero() {
 		p.Updated = time.Now().UTC()
 	}
-	s.data.Progress[key] = p
-	return s.saveLocked()
+	next.Progress[key] = p
+	return s.saveLocked(next)
 }
 
 func (s *Store) index(id string) int {
@@ -137,11 +144,8 @@ func (s *Store) index(id string) int {
 	return -1
 }
 
-func (s *Store) saveLocked() error {
-	if s.data.Progress == nil {
-		s.data.Progress = map[string]model.Progress{}
-	}
-	b, err := json.MarshalIndent(s.data, "", "  ")
+func (s *Store) saveLocked(next fileData) error {
+	b, err := json.MarshalIndent(next, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -150,5 +154,10 @@ func (s *Store) saveLocked() error {
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	if err := os.Rename(tmp, s.path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	s.data = next
+	return nil
 }

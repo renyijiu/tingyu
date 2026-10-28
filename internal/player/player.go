@@ -35,10 +35,11 @@ type Engine interface {
 }
 
 // Opener turns an episode URL into something the engine can seek.
+// It must honor ctx during opening and any subsequent network reads.
 type Opener func(ctx context.Context, audioURL string) (io.ReadSeeker, error)
 
 // SaveFunc persists a position. It may be nil.
-type SaveFunc func(episodeKey string, position, duration time.Duration)
+type SaveFunc func(episodeKey string, position, duration time.Duration) error
 
 // Controller is the playback session.
 type Controller struct {
@@ -55,11 +56,13 @@ type Controller struct {
 	gen       int
 	handle    Handle
 	closer    io.Closer
+	cancel    context.CancelFunc
 	episode   *model.Episode
 	showTitle string
 	key       string
 	buffering bool
 	playErr   error
+	saveErr   error
 	pending   *time.Duration
 	lastSave  time.Time
 }
@@ -73,6 +76,7 @@ type State struct {
 	Duration  time.Duration
 	Buffering bool
 	Err       error
+	SaveErr   error
 }
 
 // Play starts episode at resume, replacing whatever is playing.
@@ -82,6 +86,7 @@ func (c *Controller) Play(ctx context.Context, showTitle string, ep model.Episod
 	c.gen++
 	gen := c.gen
 	c.closeLocked()
+	ctx, c.cancel = context.WithCancel(ctx)
 	epCopy := ep
 	c.episode = &epCopy
 	c.showTitle = showTitle
@@ -108,6 +113,14 @@ func (c *Controller) Play(ctx context.Context, showTitle string, ep model.Episod
 		c.fail(gen, err)
 		return
 	}
+	c.mu.Lock()
+	stale := gen != c.gen
+	c.mu.Unlock()
+	if stale || ctx.Err() != nil {
+		closeIf(src)
+		c.fail(gen, ctx.Err())
+		return
+	}
 	h, err := engine.Open(src, Meta{Title: ep.Title, Artist: showTitle, Duration: ep.Duration})
 	if err != nil {
 		closeIf(src)
@@ -115,10 +128,11 @@ func (c *Controller) Play(ctx context.Context, showTitle string, ep model.Episod
 		return
 	}
 	c.mu.Lock()
-	if gen != c.gen {
+	if gen != c.gen || ctx.Err() != nil {
 		c.mu.Unlock()
 		h.Close()
 		closeIf(src)
+		c.fail(gen, ctx.Err())
 		return
 	}
 	c.handle = h
@@ -192,6 +206,7 @@ func (c *Controller) State() State {
 		ShowTitle: c.showTitle,
 		Buffering: c.buffering,
 		Err:       c.playErr,
+		SaveErr:   c.saveErr,
 	}
 	if c.handle != nil {
 		st.Playing = c.handle.Playing()
@@ -225,6 +240,10 @@ func (c *Controller) fail(gen int, err error) {
 	c.buffering = false
 	c.playErr = err
 	c.pending = nil
+	if c.cancel != nil {
+		c.cancel()
+		c.cancel = nil
+	}
 	c.mu.Unlock()
 	c.notify()
 }
@@ -246,10 +265,14 @@ func (c *Controller) rememberLocked() {
 	}
 	c.lastSave = c.now()
 	// Save runs while the controller lock is held. It must not call back in.
-	c.Save(c.key, pos, dur)
+	c.saveErr = c.Save(c.key, pos, dur)
 }
 
 func (c *Controller) closeLocked() {
+	if c.cancel != nil {
+		c.cancel()
+		c.cancel = nil
+	}
 	if c.handle != nil {
 		c.handle.Close()
 		c.handle = nil
