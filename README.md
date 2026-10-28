@@ -4,12 +4,15 @@ An open-source macOS podcast client written in Go.
 
 听宇是一个用纯 Go 写的 macOS 桌面播客客户端。界面使用 [mygo](https://github.com/egoist/mygo) 的原生 UI（不嵌网页），节目数据来自 [Podcast Index](https://podcastindex.org/)，没有密钥时搜索会改走 iTunes。
 
+名字取「听见宇宙」之意：界面是一片夜空，节目封面的颜色会染进背景的星云，侧栏和播放栏是悬浮在上面的毛玻璃，深浅色跟随系统。设计约定见[界面设计说明](docs/design.md)。
+
 ## 这个版本能做什么
 
 - 用中文或英文关键词搜索播客
 - 订阅和取消订阅，列表保存在本机
 - 查看一个节目的单集（优先解析它自己的 RSS）
-- 播放单集音频：播放、暂停、拖动进度，并记住每集听到哪里
+- 播放单集音频：播放、暂停、拖动进度、前后跳 15/30 秒、0.8×–2× 倍速，并记住每集听到哪里
+- 在「正在播放」页里，封面化作一颗行星，外圈轨道显示进度，光晕随声音的响度起伏
 
 还没做：小宇宙同步、下载管理、账号。播放时会把音频缓存在数据目录里，方便拖动进度，这不是给用户看的下载列表。当前解码支持 MP3 和 WAV。MP3 解码器首次打开时会扫描完整文件，因此可能需要等下载完成才开始播放；已完成的缓存可以复用。切换单集或退出时会取消旧下载，未完成的文件不会作为完整缓存保留。
 
@@ -17,7 +20,7 @@ An open-source macOS podcast client written in Go.
 
 到 [Podcast Index](https://api.podcastindex.org/) 申请免费的 API key 和 secret。没有密钥也可以打开应用，搜索会使用 iTunes。
 
-打开侧栏底部的齿轮「设置」，或选择菜单「听宇 → 设置…」（快捷键 `⌘,`），填写 **API Key** 和 **API Secret**，点击「保存」即可。两项默认隐藏，保存后立即用于后续搜索，无需重启。将两项都清空并保存可移除本机密钥，恢复使用 iTunes（存在环境覆盖时除外）。保存只确认本机写入成功，不验证密钥是否有效。
+打开侧栏底部的齿轮「设置」，或选择菜单「听宇 → 设置…」（快捷键 `⌘,`）；在没有密钥时，点「发现」页搜索框下的提示条也能打开。填写 **API Key** 和 **API Secret**，点击「保存」即可。两项默认隐藏，保存后立即用于后续搜索，无需重启。将两项都清空并保存可移除本机密钥，恢复使用 iTunes（存在环境覆盖时除外）。保存只确认本机写入成功，不验证密钥是否有效。
 
 密钥以仅当前用户可读写的权限保存在本机 `config.json` 中。也兼容下面的配置方式：环境变量优先于 `.env`，`.env` 优先于应用内设置和配置文件；有环境覆盖时设置窗口会提示，且不会把环境中的密钥复制到本机配置。
 
@@ -80,6 +83,12 @@ go tool mygo build -platform darwin/arm64 -skip-dmg
 go build -o tingyu .
 ```
 
+应用图标 `resources/icon.png` 由代码绘制，和侧栏的标志是同一份。改了 `internal/ui/brand.go` 里的标志后重新生成：
+
+```bash
+go run ./tools/icon
+```
+
 ## 测试与验收
 
 运行自动回归和静态检查：
@@ -89,7 +98,9 @@ go test -race ./...
 go vet ./...
 ```
 
-真实数据、原生窗口和异常播放的验证结果，以及隔离数据目录的手动复测步骤，见[首版验收记录](docs/testing/2026-10-28-v1-acceptance.md)。
+真实数据、原生窗口和异常播放的验证结果，以及隔离数据目录的手动复测步骤，见[首版验收记录](docs/testing/2026-10-28-v1-acceptance.md)。界面改版后的验证结果和需要人工检查的视觉项，见[界面改版验收记录](docs/testing/2026-10-28-ui-redesign.md)。
+
+界面测试用的渲染器没有 GPU，星云着色器和持续的动画不会运行；它们只能在真实窗口里检查。
 
 ## 代码是怎么分开的
 
@@ -101,8 +112,8 @@ go vet ./...
 | `internal/catalog` | 搜索和单集的来源选择 |
 | `internal/store` | 订阅和播放进度的 JSON 文件 |
 | `internal/media` | 远端音频下载、可 seek 的文件读取和完整缓存复用 |
-| `internal/player` | 播放、暂停、进度记忆；音频引擎是接口 |
-| `internal/player/mygoengine` | 用 mygo `audio` 真正出声 |
+| `internal/player` | 播放、暂停、进度记忆、按播放位置查询响度；音频引擎是接口 |
+| `internal/player/mygoengine` | 用 mygo `audio` 真正出声，解码时测量响度 |
 | `internal/app` | 界面背后的状态 |
 | `internal/ui` | mygo 原生界面：星云背景着色器（`nebula.kage`）、图标、动效和各页面 |
 | `tools/icon` | 用界面里的标志绘制应用图标 `resources/icon.png`（`go run ./tools/icon`） |
