@@ -63,12 +63,13 @@ func main() {
 	mygo.App.WhenReady(func() {
 		mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { playback.Close() })
 		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:     "听宇",
-			Width:     1100,
-			Height:    740,
-			MinWidth:  860,
-			MinHeight: 560,
-			Content:   ui.View(view.Build),
+			Title:         "听宇",
+			Width:         1100,
+			Height:        740,
+			MinWidth:      860,
+			MinHeight:     560,
+			TitleBarStyle: mygo.TitleBarHidden,
+			Content:       ui.View(view.Build),
 		})
 		application.OnUI = func(fn func()) { win.Update(fn) }
 		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{

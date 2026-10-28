@@ -14,12 +14,13 @@ import (
 	"github.com/renyijiu/tingyu/internal/player"
 )
 
-// View is the window contents.
+// View is the window contents: a sky the panels float over, a sidebar of
+// glass on the left, the page in the middle and the player docked below.
 type View struct {
 	App *app.App
 
 	art        *artCache
-	subs       ui.ListState
+	sky        cosmos
 	episodes   ui.ListState
 	grid       ui.GridState
 	seek       float64
@@ -28,7 +29,13 @@ type View struct {
 	recent     []recentPlay
 	libraryErr error
 
+	// burst is when a subscription last went through, for its sparkles.
+	burst time.Time
+	// searches counts the searches, so the results come in anew each time.
+	searches uint64
+
 	settingsOpen    bool
+	settingsRuns    uint64
 	settingsDraft   config.Config
 	showCredentials bool
 	settingsErr     string
@@ -45,26 +52,55 @@ func (v *View) Build(c *ui.Context) {
 	p := theme(c)
 	st := v.App.Player.State()
 	reduce := c.Preferences().ReduceMotion
-	if st.Playing || st.Buffering || v.App.Searching || (v.expanded && !reduce) {
-		c.After(32 * time.Millisecond)
+	if st.Playing || st.Buffering {
+		// The clock and the scrubber move a pixel every few seconds: four
+		// builds a second keep them current. What moves smoothly draws itself.
+		c.After(250 * time.Millisecond)
 		if st.Playing {
 			v.App.Player.Tick()
 		}
 	}
-	ui.Column(c).Fill().Background(p.bg).Children(func() {
-		if v.App.Notice != "" {
-			ui.Text(c, v.App.Notice).Padding(8, 20).FontSize(12).TextColor(p.muted)
-		}
-		v.playbackStatus(c, p, st)
-		ui.Row(c).Grow(1).Children(func() {
-			v.sidebar(c, p, st)
+	v.sky.flow(st.Playing && !reduce, c.Now())
+
+	root := ui.Column(c).Fill()
+	tint := root.AnimateColor("tint", v.skyTint(p, st), ui.Animation{Duration: 1200 * time.Millisecond, Ease: ui.EaseInOut})
+	energy := float32(0)
+	if st.Playing {
+		energy = 1
+	}
+	energy = root.AnimateTo("energy", energy, ui.Animation{Duration: 1500 * time.Millisecond, Ease: ui.EaseInOut})
+	root.Draw(func(pt *ui.Painter, r ui.Rect) { v.sky.paint(pt, r, p, tint, energy) })
+	root.Children(func() {
+		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
+			v.sidebar(c, p, st, reduce)
 			v.stage(c, p, st, reduce)
 		})
-		if !v.expanded {
-			v.miniPlayer(c, p, st)
+		if !v.expanded || st.Episode == nil {
+			v.dock(c, p, st, reduce)
 		}
+		v.status(c, p, st)
 	})
-	v.settings(c)
+	v.settings(c, p)
+}
+
+// skyTint is the color the sky takes: the playing show's on the player,
+// the open show's on its page, and otherwise what plays, if anything.
+func (v *View) skyTint(p palette, st player.State) ui.Color {
+	switch {
+	case v.expanded && st.Episode != nil:
+		img, show := v.playingArt(st)
+		return v.tintOf(p, img, show)
+	case v.onShow():
+		return v.tintOf(p, v.App.Selected.Image, v.App.Selected.Title)
+	case st.Episode != nil:
+		img, show := v.playingArt(st)
+		return v.tintOf(p, img, show)
+	}
+	return p.accent
+}
+
+func (v *View) onShow() bool {
+	return !v.home && !v.expanded && v.App.Selected != nil
 }
 
 func (v *View) stage(c *ui.Context, p palette, st player.State, reduce bool) {
@@ -87,6 +123,13 @@ func (v *View) stage(c *ui.Context, p palette, st player.State, reduce bool) {
 			v.discover(c, p, reduce)
 		}
 	})
+}
+
+// topBar is the strip along the top of the page, under the window's title
+// bar: it drags the window, and holds the page's way back.
+func (v *View) topBar(c *ui.Context, fn func()) {
+	bar := c.TitleBar()
+	ui.Row(c).Height(max(bar.Height, 18)+22).Padding(10, 28, 0, 20).Gap(10).DragWindow().Children(fn)
 }
 
 func (v *View) show(show model.Podcast) {
@@ -114,16 +157,44 @@ func (v *View) remember(show model.Podcast, ep model.Episode) {
 	v.recent = next
 }
 
-func breathe(c *ui.Context, playing, reduce bool) float32 {
-	if !playing || reduce {
-		return 1
+// playingArt is the cover and show title of what plays: the episode's own
+// cover, or its show's.
+func (v *View) playingArt(st player.State) (image, show string) {
+	if st.Episode == nil {
+		return "", ""
 	}
-	return 1 + 0.018*float32(math.Sin(seconds(c.Now())*1.35))
+	image, show = st.Episode.Image, st.ShowTitle
+	for _, item := range v.recent {
+		if item.Episode.ID == st.Episode.ID {
+			if image == "" {
+				image = item.Show.Image
+			}
+			if show == "" {
+				show = item.Show.Title
+			}
+			return image, show
+		}
+	}
+	if v.App.Selected != nil {
+		if image == "" {
+			image = v.App.Selected.Image
+		}
+		if show == "" {
+			show = v.App.Selected.Title
+		}
+	}
+	return image, show
 }
 
-func shimmer(c *ui.Context, reduce bool) float32 {
-	if reduce {
-		return 0.72
+// breathe swells e and lets it go, slowly, while something plays, as if
+// the planet were alive. The view builds four times a second while playing
+// anyway; it only turns the swell around, and the frames between only
+// paint.
+func breathe(c *ui.Context, e ui.Element, playing, reduce bool) {
+	const half = 2200 * time.Millisecond
+	scale := float32(1)
+	if playing && !reduce && int(math.Floor(seconds(c.Now())/half.Seconds()))%2 == 0 {
+		scale = 1.025
 	}
-	return 0.45 + 0.35*float32(0.5+0.5*math.Sin(seconds(c.Now())*3.2))
+	e.AnimatePose(ui.Pose{Scale: scale}, ui.Animation{Duration: half, Ease: ui.EaseInOut})
 }

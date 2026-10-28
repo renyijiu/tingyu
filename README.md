@@ -104,7 +104,8 @@ go vet ./...
 | `internal/player` | 播放、暂停、进度记忆；音频引擎是接口 |
 | `internal/player/mygoengine` | 用 mygo `audio` 真正出声 |
 | `internal/app` | 界面背后的状态 |
-| `internal/ui` | mygo 原生界面 |
+| `internal/ui` | mygo 原生界面：星云背景着色器（`nebula.kage`）、图标、动效和各页面 |
+| `tools/icon` | 用界面里的标志绘制应用图标 `resources/icon.png`（`go run ./tools/icon`） |
 | `main.go` | 把上面接起来，打开窗口 |
 
 ## 许可
