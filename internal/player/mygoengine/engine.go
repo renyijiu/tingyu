@@ -41,6 +41,7 @@ func (h *handle) Seek(d time.Duration)    { h.p.Seek(d) }
 func (h *handle) Position() time.Duration { return h.p.Position() }
 func (h *handle) Duration() time.Duration { return h.p.Duration() }
 func (h *handle) Playing() bool           { return h.p.Playing() }
+func (h *handle) SetSpeed(speed float64)  { h.p.SetSpeed(speed) }
 func (h *handle) Close() error {
 	h.p.Close()
 	return nil
