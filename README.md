@@ -78,6 +78,17 @@ go tool mygo build -platform darwin/arm64 -skip-dmg
 go build -o tingyu .
 ```
 
+## 测试与验收
+
+运行自动回归和静态检查：
+
+```bash
+go test -race ./...
+go vet ./...
+```
+
+真实数据、原生窗口和异常播放的验证结果，以及隔离数据目录的手动复测步骤，见[首版验收记录](docs/testing/2026-10-28-v1-acceptance.md)。
+
 ## 代码是怎么分开的
 
 | 包 | 职责 |
