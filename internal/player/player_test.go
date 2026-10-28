@@ -19,6 +19,7 @@ func (mem) Close() error { return nil }
 type fakeHandle struct {
 	pos     time.Duration
 	dur     time.Duration
+	speed   float64
 	playing bool
 	closed  bool
 }
@@ -29,6 +30,7 @@ func (h *fakeHandle) Seek(d time.Duration)    { h.pos = d }
 func (h *fakeHandle) Position() time.Duration { return h.pos }
 func (h *fakeHandle) Duration() time.Duration { return h.dur }
 func (h *fakeHandle) Playing() bool           { return h.playing }
+func (h *fakeHandle) SetSpeed(s float64)      { h.speed = s }
 func (h *fakeHandle) Close() error            { h.closed = true; h.playing = false; return nil }
 
 type fakeEngine struct {
@@ -117,6 +119,37 @@ func TestPlayPauseSeekSaves(t *testing.T) {
 	c.Tick()
 	if len(saved) != n+1 || saved[len(saved)-1] != 11*time.Second {
 		t.Fatalf("tick after 2s: %v", saved)
+	}
+}
+
+func TestSpeedAndSkip(t *testing.T) {
+	eng := &fakeEngine{}
+	c := &Controller{
+		Engine: eng,
+		Open: func(context.Context, string) (io.ReadSeeker, error) {
+			return mem{bytes.NewReader([]byte("x"))}, nil
+		},
+	}
+	ep := model.Episode{ID: "ep", Title: "t", AudioURL: "https://cdn/a.mp3", Duration: time.Minute}
+	c.SetSpeed(1.5)
+	c.Play(context.Background(), "show", ep, 20*time.Second)
+	if c.State().Speed != 1.5 {
+		t.Fatalf("speed %v", c.State().Speed)
+	}
+	if eng.h.speed != 1.5 {
+		t.Fatalf("engine speed %v", eng.h.speed)
+	}
+	c.Skip(-15 * time.Second)
+	if eng.h.pos != 5*time.Second {
+		t.Fatalf("skip back %v", eng.h.pos)
+	}
+	c.Skip(time.Hour)
+	if eng.h.pos != time.Minute {
+		t.Fatalf("skip clamp %v", eng.h.pos)
+	}
+	c.SetSpeed(4)
+	if c.State().Speed != 1.5 {
+		t.Fatal("out of range speed should be ignored")
 	}
 }
 

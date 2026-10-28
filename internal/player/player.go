@@ -62,6 +62,7 @@ type Controller struct {
 	playErr   error
 	pending   *time.Duration
 	lastSave  time.Time
+	speed     float64
 }
 
 // State is a snapshot the UI can draw.
@@ -71,6 +72,7 @@ type State struct {
 	Playing   bool
 	Position  time.Duration
 	Duration  time.Duration
+	Speed     float64
 	Buffering bool
 	Err       error
 }
@@ -134,9 +136,40 @@ func (c *Controller) Play(ctx context.Context, showTitle string, ep model.Episod
 	if seek > 0 {
 		h.Seek(seek)
 	}
+	applySpeed(h, c.speed)
 	h.Play()
 	c.mu.Unlock()
 	c.notify()
+}
+
+// SetSpeed changes playback speed. 1 is normal. Engines that cannot change
+// speed keep playing at their own rate; the choice is still remembered.
+func (c *Controller) SetSpeed(speed float64) {
+	if speed < 0.5 || speed > 2.5 {
+		return
+	}
+	c.mu.Lock()
+	c.speed = speed
+	h := c.handle
+	c.mu.Unlock()
+	applySpeed(h, speed)
+	c.notify()
+}
+
+// Skip moves the current episode by delta, staying inside the episode.
+func (c *Controller) Skip(delta time.Duration) {
+	st := c.State()
+	if st.Episode == nil {
+		return
+	}
+	at := st.Position + delta
+	if at < 0 {
+		at = 0
+	}
+	if st.Duration > 0 && at > st.Duration {
+		at = st.Duration
+	}
+	c.Seek(at)
 }
 
 // Toggle pauses or resumes the current episode.
@@ -202,6 +235,10 @@ func (c *Controller) State() State {
 	}
 	if st.Duration <= 0 && c.episode != nil {
 		st.Duration = c.episode.Duration
+	}
+	st.Speed = c.speed
+	if st.Speed == 0 {
+		st.Speed = 1
 	}
 	return st
 }
@@ -270,6 +307,22 @@ func (c *Controller) now() time.Time {
 func closeIf(r io.ReadSeeker) {
 	if c, ok := r.(io.Closer); ok {
 		c.Close()
+	}
+}
+
+type speedControl interface {
+	SetSpeed(float64)
+}
+
+func applySpeed(h Handle, speed float64) {
+	if h == nil {
+		return
+	}
+	if speed == 0 {
+		speed = 1
+	}
+	if s, ok := h.(speedControl); ok {
+		s.SetSpeed(speed)
 	}
 }
 
