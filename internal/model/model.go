@@ -11,6 +11,8 @@ const (
 	SourcePodcastIndex = "podcastindex"
 	SourceITunes       = "itunes"
 	SourceRSS          = "rss"
+	// SourceBoth names search results merged from Podcast Index and iTunes.
+	SourceBoth = "podcastindex+itunes"
 )
 
 // Podcast is a show the user can subscribe to.

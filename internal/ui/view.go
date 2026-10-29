@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/renyijiu/tingyu/internal/app"
+	"github.com/renyijiu/tingyu/internal/artwork"
 	"github.com/renyijiu/tingyu/internal/config"
 	"github.com/renyijiu/tingyu/internal/model"
 	"github.com/renyijiu/tingyu/internal/player"
@@ -18,12 +19,16 @@ import (
 // glass on the left, the page in the middle and the player docked below.
 type View struct {
 	App *app.App
+	// Covers loads cover images. Without one, covers are downloaded each
+	// time the window opens.
+	Covers *artwork.Loader
 
 	art        *artCache
 	sky        cosmos
 	voice      voice
 	episodes   ui.ListState
 	grid       ui.GridState
+	chartGrid  ui.GridState
 	seek       float64
 	expanded   bool
 	home       bool

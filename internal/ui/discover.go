@@ -16,6 +16,7 @@ func (v *View) discover(c *ui.Context, p palette, reduce bool) {
 	v.topBar(c, func() {})
 	// With results to show, the head steps back to make room for them.
 	busy := v.App.Searching || len(v.App.Results) > 0
+	v.App.LoadChart()
 	ui.Column(c).Grow(1).FillWidth().Padding(0, 36, 0, 36).Gap(16).Children(func() {
 		ui.Column(c.Key("head")).Gap(6).Transition(ui.ElementTransition{Animation: &glide, Size: true}).Children(func() {
 			if !busy {
@@ -39,6 +40,8 @@ func (v *View) discover(c *ui.Context, p palette, reduce bool) {
 		switch {
 		case v.App.Searching:
 			v.skeletons(c, p, reduce)
+		case len(v.App.Results) == 0 && len(v.App.Chart) > 0:
+			v.discoverChart(c, p, reduce)
 		case len(v.App.Results) == 0:
 			v.discoverEmpty(c, p, reduce)
 		default:
@@ -131,23 +134,42 @@ func (v *View) discoverEmpty(c *ui.Context, p palette, reduce bool) {
 		ui.Box(c).Size(260, 150).Draw(func(pt *ui.Painter, r ui.Rect) { drawOrbits(pt, r, p, reduce) })
 		ui.Text(c, "宇宙很大，从一个关键词开始").FontSize(20).Bold()
 		ui.Text(c, "封面会从这里铺开。试试：").FontSize(13).TextColor(p.muted)
-		ui.Row(c).Gap(8).Wrap().Justify(ui.Center).MaxWidth(520).Children(func() {
-			for _, s := range suggestions {
-				b := ui.ButtonBase(c.Key("try:"+s)).Padding(7, 14).Radius(999).Border(1, p.rim)
-				bg := p.panel
-				if b.Hovered() {
-					bg = p.panelHi
-					b.Border(1, p.accent.Alpha(0.45))
-				}
-				b.Background(b.AnimateColor("bg", bg, ui.Animation{Duration: 120 * time.Millisecond}))
-				b.Children(func() { ui.Text(c, s).FontSize(13) })
-				if b.Clicked() {
-					v.App.Query = s
-					v.search()
-				}
-			}
-		})
+		ui.Row(c).Gap(8).Wrap().Justify(ui.Center).MaxWidth(520).Children(func() { v.suggestionChips(c, p) })
 	})
+}
+
+// suggestionChips are searches to start from, one click each.
+func (v *View) suggestionChips(c *ui.Context, p palette) {
+	for _, s := range suggestions {
+		b := ui.ButtonBase(c.Key("try:"+s)).Padding(7, 14).Radius(999).Border(1, p.rim)
+		bg := p.panel
+		if b.Hovered() {
+			bg = p.panelHi
+			b.Border(1, p.accent.Alpha(0.45))
+		}
+		b.Background(b.AnimateColor("bg", bg, ui.Animation{Duration: 120 * time.Millisecond}))
+		b.Children(func() { ui.Text(c, s).FontSize(13) })
+		if b.Clicked() {
+			v.App.Query = s
+			v.search()
+		}
+	}
+}
+
+// discoverChart is what most listen to now, ranked, under the searches to
+// start from.
+func (v *View) discoverChart(c *ui.Context, p palette, reduce bool) {
+	ui.Row(c).Gap(8).Wrap().AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "试试：").FontSize(13).TextColor(p.muted)
+		v.suggestionChips(c, p)
+	})
+	ui.Row(c).Gap(10).Padding(6, 0, 0, 0).Children(func() {
+		ui.Text(c, "大家在听").FontSize(17).Bold()
+		ui.Text(c, itoa(len(v.App.Chart))+" 档").FontSize(12).FontFeatures("tnum").TextColor(p.muted)
+		ui.Spacer(c)
+		chip(c, p, iconSignal, "Apple 播客 · 中国区榜单", p.cyan)
+	})
+	v.showGrid(c, p, &v.chartGrid, v.App.Chart, true, reduce)
 }
 
 // drawOrbits draws three planets on tilted orbits around a sun of the
@@ -224,6 +246,11 @@ func (v *View) results(c *ui.Context, p palette, reduce bool) {
 		ui.Spacer(c)
 		chip(c, p, iconSignal, "来自 "+sourceName(v.App.ResultSource), p.cyan)
 	})
+	v.showGrid(c, p, &v.grid, v.App.Results, false, reduce)
+}
+
+// showGrid lays shows out as cards, numbered when ranked.
+func (v *View) showGrid(c *ui.Context, p palette, state *ui.GridState, shows []model.Podcast, ranked, reduce bool) {
 	// The covers fill their cards, so the rows are as high as the cards
 	// are wide: work out how wide the grid makes them.
 	const minWidth, gap = 168, 16
@@ -231,15 +258,20 @@ func (v *View) results(c *ui.Context, p palette, reduce bool) {
 	inner := max(w-326, minWidth)
 	cols := max(float32(int((inner+gap)/(minWidth+gap))), 1)
 	art := (inner-gap*(cols-1))/cols - 20
-	ui.GridView(c, &v.grid, len(v.App.Results), minWidth, art+74, func(i int) {
-		v.resultCard(c, p, i, v.App.Results[i], art, reduce)
+	ui.GridView(c, state, len(shows), minWidth, art+74, func(i int) {
+		rank := 0
+		if ranked {
+			rank = i + 1
+		}
+		v.resultCard(c, p, i, shows[i], art, rank, reduce)
 	}).Gap(gap).Grow(1).Margin(0, -8).Padding(4, 8, 24, 8)
 }
 
-// resultCard is a show in the results. Cards rise in one after another;
-// under the pointer, one lifts toward the viewer and glows in its cover's
-// color, and its cover is the one that flies to the show's page.
-func (v *View) resultCard(c *ui.Context, p palette, i int, show model.Podcast, art float32, reduce bool) {
+// resultCard is a show in the results or the chart, with its place on the
+// chart when rank is set. Cards rise in one after another; under the
+// pointer, one lifts toward the viewer and glows in its cover's color, and
+// its cover is the one that flies to the show's page.
+func (v *View) resultCard(c *ui.Context, p palette, i int, show model.Podcast, art float32, rank int, reduce bool) {
 	card := ui.ButtonBase(c.Key("card:" + show.ID)).Fill().Padding(10).Radius(20).FocusRing(false)
 	hot := card.Hovered() || card.Focused()
 	tint := v.tintOf(p, show.Image, show.Title)
@@ -271,6 +303,18 @@ func (v *View) resultCard(c *ui.Context, p palette, i int, show model.Podcast, a
 				match = coverMatch{show.ID}
 			}
 			v.artwork(c, p, show.Image, show.Title, art, 14, match).FillWidth().AspectRatio(1)
+			if rank > 0 {
+				badge := ui.Row(c).Height(24).MinWidth(24).Padding(0, 7).Radius(12).Justify(ui.Center).
+					Attach(ui.AnchorTopLeft, ui.AnchorTopLeft).Left(8).Top(8).PassThrough()
+				if rank <= 3 {
+					badge.LinearGradient(p.aurora(120))
+				} else {
+					badge.Background(ui.RGBA(10, 8, 22, 0.55)).Border(1, ui.RGBA(255, 255, 255, 0.18))
+				}
+				badge.Children(func() {
+					ui.Text(c, itoa(rank)).FontSize(12).Bold().FontFeatures("tnum").TextColor(ui.RGBA(255, 255, 255, 0.96))
+				})
+			}
 			ui.Column(c).Gap(2).Padding(0, 2).Children(func() {
 				ui.Text(c, show.Title).SingleLine().Bold().FontSize(14)
 				author := show.Author

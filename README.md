@@ -2,15 +2,16 @@
 
 An open-source macOS podcast client written in Go.
 
-听宇是一个用纯 Go 写的 macOS 桌面播客客户端。界面使用 [mygo](https://github.com/egoist/mygo) 的原生 UI（不嵌网页），节目数据来自 [Podcast Index](https://podcastindex.org/)，没有密钥时搜索会改走 iTunes。
+听宇是一个用纯 Go 写的 macOS 桌面播客客户端。界面使用 [mygo](https://github.com/egoist/mygo) 的原生 UI（不嵌网页），节目数据来自 [Podcast Index](https://podcastindex.org/) 和 iTunes：配了密钥时两边同时搜索并合并结果，没有密钥时只用 iTunes。
 
 名字取「听见宇宙」之意：界面是一片夜空，节目封面的颜色会染进背景的星云，侧栏和播放栏是悬浮在上面的毛玻璃，深浅色跟随系统。设计约定见[界面设计说明](docs/design.md)。
 
 ## 这个版本能做什么
 
-- 用中文或英文关键词搜索播客
+- 用中文或英文关键词搜索播客。配了 Podcast Index 时两边同时搜索：同一档节目只出现一次，标题和关键词完全一样的排在最前；一边先有结果后，最多再等另一边 2 秒
+- 「发现」页展示 Apple 播客中国区榜单的前 24 档（只列出有公开 RSS 的）。榜单加载失败时，一分钟后回到这一页会再试
 - 订阅和取消订阅，列表保存在本机
-- 查看一个节目的单集（优先解析它自己的 RSS）
+- 查看一个节目的单集和简介，优先读它自己的 RSS。打开过的节目再打开时，先显示上次的单集列表，同时问 RSS 有没有更新；RSS 读不到时也用上次的列表，这样单集的身份和听到的位置不会变
 - 播放单集音频：播放、暂停、拖动进度、前后跳 15/30 秒、0.8×–2× 倍速，并记住每集听到哪里
 - 在「正在播放」页里，封面化作一颗行星，外圈轨道显示进度，光晕随声音的响度起伏
 
@@ -46,7 +47,7 @@ export PODCASTINDEX_API_SECRET="你的 secret"
 
 第一次启动时如果文件还不存在，应用会写一份空模板。密钥不要提交到仓库。
 
-订阅和播放进度在同一目录的 `library.json`。播放缓存放在其中的 `cache/`。用 `TINGYU_DATA_DIR` 可以改掉这个目录（测试时会用到）。
+订阅和播放进度在同一目录的 `library.json`。缓存都在其中的 `cache/` 里：音频直接放在 `cache/`；`cache/feeds/` 是每档节目上次的单集列表，保留最近打开的 60 档；`cache/covers/` 是缩小到 640 像素以内的封面，保留最近用到的 1000 张，约 80 MB。删掉 `cache/` 不会丢订阅和进度。用 `TINGYU_DATA_DIR` 可以改掉这个目录（测试时会用到）。
 
 ## 在 Mac 上构建和运行
 
@@ -98,7 +99,7 @@ go test -race ./...
 go vet ./...
 ```
 
-真实数据、原生窗口和异常播放的验证结果，以及隔离数据目录的手动复测步骤，见[首版验收记录](docs/testing/2026-10-28-v1-acceptance.md)。界面改版后的验证结果和需要人工检查的视觉项，见[界面改版验收记录](docs/testing/2026-10-28-ui-redesign.md)。小宇宙 M4A 播放的验证见 [M4A 播放验收记录](docs/testing/2026-10-28-m4a.md)。
+真实数据、原生窗口和异常播放的验证结果，以及隔离数据目录的手动复测步骤，见[首版验收记录](docs/testing/2026-10-28-v1-acceptance.md)。界面改版后的验证结果和需要人工检查的视觉项，见[界面改版验收记录](docs/testing/2026-10-28-ui-redesign.md)。小宇宙 M4A 播放的验证见 [M4A 播放验收记录](docs/testing/2026-10-28-m4a.md)。搜索合并、榜单、简介和缓存的验证见[数据源优化验收记录](docs/testing/2026-10-29-data-sources.md)。
 
 界面测试用的渲染器没有 GPU，星云着色器和持续的动画不会运行；它们只能在真实窗口里检查。
 
@@ -107,9 +108,10 @@ go vet ./...
 | 包 | 职责 |
 | --- | --- |
 | `internal/podcastindex` | Podcast Index 客户端，含鉴权签名 |
-| `internal/itunes` | iTunes Search API，无密钥 |
-| `internal/feed` | 用 gofeed 解析 RSS |
-| `internal/catalog` | 搜索和单集的来源选择 |
+| `internal/itunes` | iTunes Search API 和 Apple 播客榜单，无密钥 |
+| `internal/feed` | 用 gofeed 解析 RSS，支持条件请求（ETag、Last-Modified） |
+| `internal/catalog` | 搜索的并发和合并、单集的来源选择、单集列表的磁盘缓存 |
+| `internal/artwork` | 封面下载、缩小和磁盘缓存 |
 | `internal/store` | 订阅和播放进度的 JSON 文件 |
 | `internal/media` | 远端音频下载、可 seek 的文件读取和完整缓存复用 |
 | `internal/player` | 播放、暂停、进度记忆、按播放位置查询响度；音频引擎是接口 |
@@ -122,6 +124,6 @@ go vet ./...
 
 ## 许可
 
-本仓库的代码使用 MIT 许可证。直接依赖的 mygo 和 gofeed 也是 MIT，可以一起用。播放 MP3 时会经过 mygo 带到 `github.com/hajimehoshi/go-mp3`，那个库是 Apache-2.0，只约束它自己的代码。
+本仓库的代码使用 MIT 许可证。直接依赖的 mygo 和 gofeed 也是 MIT，可以一起用。缩小封面用的 `golang.org/x/image` 是 BSD 许可，mygo 本来就依赖它。播放 MP3 时会经过 mygo 带到 `github.com/hajimehoshi/go-mp3`，那个库是 Apache-2.0，只约束它自己的代码。
 
 M4A 解码直接依赖 `github.com/ebitengine/purego`，它是 Apache-2.0，mygo 本身也依赖它，同样只约束它自己的代码。真正解码的是 macOS 自带的 AudioToolbox，它是系统框架，不随应用分发，不带来新的许可条款。没有用纯 Go 的 AAC 解码库，是因为找到的几个都是 LGPL 或 GPL：Go 是静态链接的，和 MIT 的应用放在一起不方便。

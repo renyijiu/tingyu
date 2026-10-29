@@ -158,6 +158,8 @@ func sourceName(source string) string {
 		return "iTunes"
 	case model.SourcePodcastIndex:
 		return "Podcast Index"
+	case model.SourceBoth:
+		return "Podcast Index 和 iTunes"
 	default:
 		if source == "" {
 			return "搜索"

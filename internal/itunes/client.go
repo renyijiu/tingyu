@@ -21,7 +21,9 @@ const defaultBase = "https://itunes.apple.com"
 
 // Client calls the iTunes Search API.
 type Client struct {
-	BaseURL   string
+	BaseURL string
+	// ChartsURL serves Apple's charts; see Top.
+	ChartsURL string
 	UserAgent string
 	HTTP      *http.Client
 }
@@ -78,7 +80,12 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, dest any) e
 		return err
 	}
 	u.RawQuery = q.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	return c.fetch(ctx, u.String(), dest)
+}
+
+// fetch reads the JSON at rawURL into dest.
+func (c *Client) fetch(ctx context.Context, rawURL string, dest any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return err
 	}

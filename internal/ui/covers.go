@@ -1,28 +1,30 @@
 package ui
 
 import (
-	"bytes"
+	"context"
 	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
-	"io"
 	"math"
-	"net/http"
 	"sync"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/renyijiu/tingyu/internal/version"
+	"github.com/renyijiu/tingyu/internal/artwork"
 )
 
+// keptCovers is how many covers stay in memory: far more than a window
+// shows at once, few enough to stay small, as covers are shrunk to
+// artwork.MaxSide.
+const keptCovers = 120
+
 // artCache downloads cover images once and keeps the color the sky takes
-// from each.
+// from each. The covers used longest ago are let go past keptCovers; the
+// loader keeps them on disk to come back quickly.
 type artCache struct {
 	mu   sync.Mutex
 	bmp  map[string]*ui.Bitmap
 	col  map[string]ui.Color
+	used map[string]uint64
+	tick uint64
 	busy map[string]bool
 	bad  map[string]bool
 }
@@ -32,6 +34,7 @@ func (v *View) arts() *artCache {
 		v.art = &artCache{
 			bmp:  map[string]*ui.Bitmap{},
 			col:  map[string]ui.Color{},
+			used: map[string]uint64{},
 			busy: map[string]bool{},
 			bad:  map[string]bool{},
 		}
@@ -48,6 +51,10 @@ func (v *View) coverBitmap(url string) (*ui.Bitmap, ui.Color, bool) {
 	bmp, ok := a.bmp[url]
 	col := a.col[url]
 	busy, failed := a.busy[url], a.bad[url]
+	if ok {
+		a.tick++
+		a.used[url] = a.tick
+	}
 	if ok || busy || failed {
 		a.mu.Unlock()
 		return bmp, col, ok
@@ -68,39 +75,36 @@ func (v *View) fetchCover(url string) {
 			v.App.OnUI(func() {})
 		}
 	}()
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	covers := v.Covers
+	if covers == nil {
+		covers = &artwork.Loader{}
+	}
+	img, err := covers.Load(context.Background(), url)
 	if err != nil {
 		v.markBad(url)
 		return
 	}
-	req.Header.Set("User-Agent", version.UserAgent())
-	resp, err := client.Do(req)
-	if err != nil {
-		v.markBad(url)
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		v.markBad(url)
-		return
-	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		v.markBad(url)
-		return
-	}
-	img, _, err := image.Decode(bytes.NewReader(raw))
-	if err != nil {
-		v.markBad(url)
-		return
-	}
-	bmp := ui.NewBitmap(img)
-	col := vibrant(img)
+	a.put(url, ui.NewBitmap(img), vibrant(img))
+}
+
+// put keeps a cover, letting go of the one used longest ago when there are
+// too many.
+func (a *artCache) put(url string, bmp *ui.Bitmap, col ui.Color) {
 	a.mu.Lock()
-	a.bmp[url] = bmp
-	a.col[url] = col
-	a.mu.Unlock()
+	defer a.mu.Unlock()
+	a.tick++
+	a.bmp[url], a.col[url], a.used[url] = bmp, col, a.tick
+	for len(a.bmp) > keptCovers {
+		oldest, at := "", uint64(math.MaxUint64)
+		for u, t := range a.used {
+			if t < at {
+				oldest, at = u, t
+			}
+		}
+		delete(a.bmp, oldest)
+		delete(a.col, oldest)
+		delete(a.used, oldest)
+	}
 }
 
 func (v *View) markBad(url string) {
