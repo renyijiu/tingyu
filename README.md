@@ -14,7 +14,7 @@ An open-source macOS podcast client written in Go.
 - 播放单集音频：播放、暂停、拖动进度、前后跳 15/30 秒、0.8×–2× 倍速，并记住每集听到哪里
 - 在「正在播放」页里，封面化作一颗行星，外圈轨道显示进度，光晕随声音的响度起伏
 
-还没做：小宇宙同步、下载管理、账号。播放时会把音频缓存在数据目录里，方便拖动进度，这不是给用户看的下载列表。当前解码支持 MP3 和 WAV。MP3 解码器首次打开时会扫描完整文件，因此可能需要等下载完成才开始播放；已完成的缓存可以复用。切换单集或退出时会取消旧下载，未完成的文件不会作为完整缓存保留。
+还没做：小宇宙同步、下载管理、账号。播放时会把音频缓存在数据目录里，方便拖动进度，这不是给用户看的下载列表。当前解码支持 MP3、M4A（MP4 里的 AAC，小宇宙的节目都是这种）和 WAV。M4A 用 macOS 自带的 AudioToolbox 解码：索引（`moov`）在文件开头时边下边播，小宇宙的文件就是这样；索引在末尾时要等下载完成。MP3 解码器首次打开时会扫描完整文件，因此可能需要等下载完成才开始播放；已完成的缓存可以复用。切换单集或退出时会取消旧下载，未完成的文件不会作为完整缓存保留。
 
 ## 配置 Podcast Index
 
@@ -50,7 +50,7 @@ export PODCASTINDEX_API_SECRET="你的 secret"
 
 ## 在 Mac 上构建和运行
 
-需要 Go 1.27.3 或更高版本。mygo 不使用 cgo。
+需要 Go 1.27.3 或更高版本。mygo 不使用 cgo，听宇也不用：M4A 解码像 mygo 的音频输出一样，通过 purego 调用系统的 AudioToolbox。
 
 ```bash
 go test ./...
@@ -98,7 +98,7 @@ go test -race ./...
 go vet ./...
 ```
 
-真实数据、原生窗口和异常播放的验证结果，以及隔离数据目录的手动复测步骤，见[首版验收记录](docs/testing/2026-10-28-v1-acceptance.md)。界面改版后的验证结果和需要人工检查的视觉项，见[界面改版验收记录](docs/testing/2026-10-28-ui-redesign.md)。
+真实数据、原生窗口和异常播放的验证结果，以及隔离数据目录的手动复测步骤，见[首版验收记录](docs/testing/2026-10-28-v1-acceptance.md)。界面改版后的验证结果和需要人工检查的视觉项，见[界面改版验收记录](docs/testing/2026-10-28-ui-redesign.md)。小宇宙 M4A 播放的验证见 [M4A 播放验收记录](docs/testing/2026-10-28-m4a.md)。
 
 界面测试用的渲染器没有 GPU，星云着色器和持续的动画不会运行；它们只能在真实窗口里检查。
 
@@ -114,6 +114,7 @@ go vet ./...
 | `internal/media` | 远端音频下载、可 seek 的文件读取和完整缓存复用 |
 | `internal/player` | 播放、暂停、进度记忆、按播放位置查询响度；音频引擎是接口 |
 | `internal/player/mygoengine` | 用 mygo `audio` 真正出声，解码时测量响度 |
+| `internal/player/mygoengine/m4a` | 通过 purego 调用 macOS AudioToolbox 解码 M4A（AAC），读到还没下载的部分时等待 |
 | `internal/app` | 界面背后的状态 |
 | `internal/ui` | mygo 原生界面：星云背景着色器（`nebula.kage`）、图标、动效和各页面 |
 | `tools/icon` | 用界面里的标志绘制应用图标 `resources/icon.png`（`go run ./tools/icon`） |
@@ -122,3 +123,5 @@ go vet ./...
 ## 许可
 
 本仓库的代码使用 MIT 许可证。直接依赖的 mygo 和 gofeed 也是 MIT，可以一起用。播放 MP3 时会经过 mygo 带到 `github.com/hajimehoshi/go-mp3`，那个库是 Apache-2.0，只约束它自己的代码。
+
+M4A 解码直接依赖 `github.com/ebitengine/purego`，它是 Apache-2.0，mygo 本身也依赖它，同样只约束它自己的代码。真正解码的是 macOS 自带的 AudioToolbox，它是系统框架，不随应用分发，不带来新的许可条款。没有用纯 Go 的 AAC 解码库，是因为找到的几个都是 LGPL 或 GPL：Go 是静态链接的，和 MIT 的应用放在一起不方便。
