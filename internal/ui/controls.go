@@ -252,6 +252,16 @@ func pill(c *ui.Context, p palette, key string, glyph *ui.SVG, label string, pri
 	return btn
 }
 
+// dot fills a circle of radius r at a point that moves from frame to
+// frame. Fill rounds a rectangle to whole pixels to keep its edges crisp,
+// so a small circle drawn with it on the move steps from pixel to pixel; a
+// path is smoothed where it falls between them.
+func dot(pt *ui.Painter, cx, cy, r float32, c ui.Color) {
+	var circle ui.Path
+	circle.Circle(cx, cy, r)
+	pt.FillPath(&circle, c)
+}
+
 // sparkles bursts small stars out of r for a moment after at.
 func sparkles(pt *ui.Painter, r ui.Rect, p palette, at time.Time) {
 	if at.IsZero() || !pt.Accelerated() {

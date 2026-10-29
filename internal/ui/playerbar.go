@@ -253,10 +253,9 @@ func drawHalo(pt *ui.Painter, r ui.Rect, p palette, tint ui.Color, planet float3
 	}
 	// The moon, where the episode has got to.
 	mx, my := cx+orbit*float32(math.Cos(float64(end))), cy+orbit*float32(math.Sin(float64(end)))
-	for _, g := range []struct{ d, a float32 }{{26, 0.12}, {14, 0.3}} {
-		pt.Fill(ui.Rect{X: mx - g.d/2, Y: my - g.d/2, W: g.d, H: g.d}, p.cyan.Alpha(g.a), g.d/2)
-	}
-	pt.Fill(ui.Rect{X: mx - 4, Y: my - 4, W: 8, H: 8}, ui.Hex("#ffffff"), 4)
+	dot(pt, mx, my, 13, p.cyan.Alpha(0.12))
+	dot(pt, mx, my, 7, p.cyan.Alpha(0.3))
+	dot(pt, mx, my, 4, ui.Hex("#ffffff"))
 }
 
 // speeds is the row of playback speeds, a pill of the aurora sliding to

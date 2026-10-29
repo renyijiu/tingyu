@@ -173,14 +173,16 @@ func (v *View) discoverChart(c *ui.Context, p palette, reduce bool) {
 }
 
 // drawOrbits draws three planets on tilted orbits around a sun of the
-// aurora, turning while the window has a GPU to turn them with.
+// aurora, turning while the window has a GPU to turn them with. They move
+// a little each frame, so they are drawn as paths, at every display
+// refresh up to 60 a second: see dot.
 func drawOrbits(pt *ui.Painter, r ui.Rect, p palette, reduce bool) {
 	cx, cy := r.X+r.W/2, r.Y+r.H/2
 	moving := !reduce && pt.Accelerated()
 	t := 0.0
 	if moving {
 		t = seconds(pt.Now())
-		pt.AnimationFrameRate(30)
+		pt.AnimationFrameRate(60)
 	}
 	orbits := []struct {
 		rx, ry, speed, size float32
@@ -196,8 +198,8 @@ func drawOrbits(pt *ui.Painter, r ui.Rect, p palette, reduce bool) {
 		sin, cos := float32(math.Sin(-0.18)), float32(math.Cos(-0.18))
 		x, y := o.rx*float32(math.Cos(a)), o.ry*float32(math.Sin(a))
 		px, py := cx+x*cos-y*sin, cy+x*sin+y*cos
-		pt.Fill(ui.Rect{X: px - o.size*1.6, Y: py - o.size*1.6, W: o.size * 3.2, H: o.size * 3.2}, o.col.Alpha(0.16), o.size*1.6)
-		pt.Fill(ui.Rect{X: px - o.size/2, Y: py - o.size/2, W: o.size, H: o.size}, o.col, o.size/2)
+		dot(pt, px, py, o.size*1.6, o.col.Alpha(0.16))
+		dot(pt, px, py, o.size/2, o.col)
 	}
 	for _, g := range []struct{ d, a float32 }{{70, 0.1}, {46, 0.18}} {
 		pt.Fill(ui.Rect{X: cx - g.d/2, Y: cy - g.d/2, W: g.d, H: g.d}, p.accent.Alpha(g.a), g.d/2)
