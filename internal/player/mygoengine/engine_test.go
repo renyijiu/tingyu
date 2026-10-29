@@ -3,6 +3,7 @@ package mygoengine
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"math"
 	"os"
 	"runtime"
@@ -97,7 +98,8 @@ func TestOpenPlaysMetersAndCloses(t *testing.T) {
 
 func TestOpenUnknownFormat(t *testing.T) {
 	_, err := New().Open(bytes.NewReader([]byte("not audio at all")), player.Meta{})
-	if err == nil || !strings.Contains(err.Error(), "M4A") {
-		t.Fatalf("Open = %v, want the supported formats named", err)
+	var notice player.Notice
+	if !errors.As(err, &notice) || !strings.Contains(string(notice), "M4A") {
+		t.Fatalf("Open = %v, want a notice naming the supported formats", err)
 	}
 }

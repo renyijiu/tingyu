@@ -30,7 +30,7 @@ func New() *Engine {
 func (e *Engine) Open(r io.ReadSeeker, _ player.Meta) (player.Handle, error) {
 	d, _, err := audio.NewDecoder(r)
 	if err != nil {
-		return nil, fmt.Errorf("无法解码音频（当前支持 MP3、M4A 和 WAV）：%w", err)
+		return nil, fmt.Errorf("%w: %w", player.Notice("无法解码音频（当前支持 MP3、M4A 和 WAV）"), err)
 	}
 	m := &metered{Decoder: d}
 	return &handle{p: audio.NewPlayer(closing{m, r}), m: m, rate: d.SampleRate()}, nil

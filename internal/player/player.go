@@ -4,7 +4,9 @@ package player
 
 import (
 	"context"
+	"errors"
 	"io"
+	"log"
 	"sync"
 	"time"
 
@@ -103,11 +105,11 @@ func (c *Controller) Play(ctx context.Context, showTitle string, ep model.Episod
 	c.notify()
 
 	if open == nil || engine == nil {
-		c.fail(gen, errString("播放器未就绪"))
+		c.fail(gen, Notice("播放器未就绪"))
 		return
 	}
 	if ep.AudioURL == "" {
-		c.fail(gen, errString("这一集没有音频地址"))
+		c.fail(gen, Notice("这一集没有音频地址"))
 		return
 	}
 	src, err := open(ctx, ep.AudioURL)
@@ -274,6 +276,9 @@ func (c *Controller) fail(gen int, err error) {
 		c.mu.Unlock()
 		return
 	}
+	if err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("play %s: %v", c.key, err)
+	}
 	c.buffering = false
 	c.playErr = err
 	c.pending = nil
@@ -349,8 +354,8 @@ func applySpeed(h Handle, speed float64) {
 	}
 }
 
-type stringErr string
+// Notice is an error already worded for the listener, which the window
+// shows as it is.
+type Notice string
 
-func (e stringErr) Error() string { return string(e) }
-
-func errString(s string) error { return stringErr(s) }
+func (n Notice) Error() string { return string(n) }

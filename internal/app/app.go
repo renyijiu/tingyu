@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -85,7 +86,8 @@ func (a *App) Search() {
 			a.Searching = false
 			a.ResultSource = src
 			if err != nil {
-				a.SearchErr = err.Error()
+				log.Printf("search %q: %v", q, err)
+				a.SearchErr = Explain(err, "搜索失败，请稍后再试")
 				a.Results = nil
 				return
 			}
@@ -154,7 +156,8 @@ func (a *App) Open(p model.Podcast) {
 			}
 			a.Loading = false
 			if err != nil {
-				a.EpErr = err.Error()
+				log.Printf("episodes of %s: %v", p.FeedURL, err)
+				a.EpErr = Explain(err, "无法读取这个节目的单集")
 				return
 			}
 			a.Selected = &show

@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
+	"github.com/renyijiu/tingyu/internal/app"
 	"github.com/renyijiu/tingyu/internal/player"
 )
 
@@ -25,7 +26,7 @@ func (v *View) status(c *ui.Context, p palette, st player.State) {
 	}
 	var lines []line
 	if st.Err != nil {
-		lines = append(lines, line{st.Err.Error(), iconAlert, p.danger, true})
+		lines = append(lines, line{app.Explain(st.Err, "无法播放这一集"), iconAlert, p.danger, true})
 	} else if st.Buffering {
 		lines = append(lines, line{"正在缓冲…", iconWave, p.cyan, false})
 	}
