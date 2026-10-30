@@ -1,18 +1,24 @@
 package ui
 
-import "github.com/egoist/mygo/ui"
+import (
+	"time"
 
-var settingsIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M10 2h4l.6 2.6 2.1 1.2 2.6-.8 2 3.5-2 1.8v3.4l2 1.8-2 3.5-2.6-.8-2.1 1.2L14 22h-4l-.6-2.6-2.1-1.2-2.6.8-2-3.5 2-1.8v-3.4l-2-1.8 2-3.5 2.6.8 2.1-1.2z"/><circle cx="12" cy="12" r="3.2"/></svg>`))
+	"github.com/egoist/mygo/plugins/glass"
+	"github.com/egoist/mygo/ui"
+)
 
 func (v *View) settingsEntry(c *ui.Context, p palette) {
-	button := ui.ButtonBase(c.Key("settings-entry")).Label("设置").FillWidth().MinHeight(40).Padding(8, 10).Gap(10).Radius(10)
+	button := ui.ButtonBase(c.Key("settings-entry")).Label("设置").FillWidth().Height(38).Padding(0, 10).Gap(11).Radius(11)
+	v.rowLight(button, p, false)
+	turn := float32(0)
 	if button.Hovered() {
-		button.Background(p.cardHover)
+		turn = 60
 	}
 	button.Children(func() {
-		ui.Icon(c, settingsIcon).Size(18, 18).TextColor(p.muted)
-		ui.Text(c, "设置").FontSize(13).TextColor(p.muted).Grow(1)
-		ui.Text(c, "⌘,").FontSize(12).TextColor(p.faint)
+		gear := ui.Icon(c, iconSettings).FontSize(17).TextColor(p.muted)
+		gear.Rotate(gear.AnimateTo("turn", turn, pop))
+		ui.Text(c, "设置").FontSize(13).Bold().TextColor(p.muted).Grow(1)
+		ui.Text(c, "⌘,").FontSize(11).TextColor(p.faint).Padding(1, 6).Radius(6).Border(1, p.rim)
 	})
 	if button.Clicked() {
 		v.OpenSettings()
@@ -27,40 +33,93 @@ func (v *View) OpenSettings() {
 	v.showCredentials = false
 	v.settingsErr, v.settingsMessage = "", ""
 	v.settingsOpen = true
+	v.settingsRuns++
 }
 
-func (v *View) settings(c *ui.Context) {
-	t := c.Theme()
-	ui.Modal(c.Key("settings"), &v.settingsOpen, func() {
-		ui.Column(c).Width(440).Gap(12).Children(func() {
-			ui.Text(c, "设置").FontSize(22).Bold()
-			ui.Text(c, "Podcast Index").Bold()
-			ui.Text(c, "填写 API Key 和 API Secret，保存后用于后续搜索。清空两项可移除本机密钥。").TextColor(t.TextMuted)
-			if v.App.Settings.HasOverrides() {
-				ui.Text(c, "环境变量或 .env 中的密钥优先生效，此处仅修改本机保存的配置。").TextColor(t.TextMuted)
-			}
-			keyChanged := v.credentialField(c, "API Key", &v.settingsDraft.PodcastIndexKey)
-			secretChanged := v.credentialField(c, "API Secret", &v.settingsDraft.PodcastIndexSecret)
-			ui.Checkbox(c, &v.showCredentials, "显示密钥")
-			if keyChanged || secretChanged {
-				v.settingsErr, v.settingsMessage = "", ""
-			}
-			ui.Text(c, "密钥仅保存在本机。保存不会验证密钥是否有效。").FontSize(12).TextColor(t.TextMuted)
-			if v.settingsErr != "" {
-				ui.Text(c, v.settingsErr).TextColor(t.Danger)
-			}
-			if v.settingsMessage != "" {
-				ui.Text(c, v.settingsMessage).TextColor(t.TextMuted)
-			}
-			ui.Row(c).Gap(8).Children(func() {
-				if ui.Button(c, "关闭").Clicked() {
-					v.settingsOpen = false
-				}
-				if ui.PrimaryButton(c, "保存").Clicked() {
-					v.saveSettings()
-				}
-			})
+// settings is a panel over the frosted window: where searches come from,
+// and the keys of Podcast Index.
+func (v *View) settings(c *ui.Context, p palette) {
+	ui.DialogBase(c.Key("settings"), &v.settingsOpen, func(backdrop, panel ui.Element) {
+		backdrop.Background(p.void.Alpha(0.45)).Material(glass.Blur{Radius: 8})
+		in := panel.Keyframes("in", []ui.Keyframe{{At: 0, Value: 0}, {At: 360 * time.Millisecond, Value: 1, Ease: ui.CubicBezier(0.2, 1.3, 0.4, 1)}},
+			ui.KeyframeOptions{Run: v.settingsRuns})
+		panel.Width(460).Padding(24).Gap(14).Radius(26).Background(p.solid).
+			Border(1, ui.Color{}).BorderLinearGradient(ui.LinearGradient{Angle: 160, Stops: []ui.GradientStop{
+			{Color: p.accent.Alpha(0.6), At: 0}, {Color: p.rim, At: 0.4}, {Color: p.cyan.Alpha(0.35), At: 1},
+		}}).
+			Shadow(0, 30, 80, -10, p.shadow).Shadow(0, 0, 60, 0, p.accent.Alpha(0.12)).
+			Opacity(min(in*1.5, 1)).Scale(0.94+0.06*in, 0.94+0.06*in)
+		panel.Children(func() { v.settingsBody(c, p) })
+	})
+}
+
+func (v *View) settingsBody(c *ui.Context, p palette) {
+	ready := v.App.Settings.Effective().Ready()
+	ui.Row(c).Gap(14).Children(func() {
+		ui.Box(c).Size(44, 44).Radius(14).Center().LinearGradient(p.aurora(135)).
+			Shadow(0, 8, 20, 0, p.accent.Alpha(0.35)).Children(func() {
+			ui.Icon(c, iconKey).FontSize(21).TextColor(p.accentText)
 		})
+		ui.Column(c).Grow(1).Gap(2).Children(func() {
+			ui.Text(c, "设置").FontSize(20).Bold()
+			ui.Text(c, "搜索来源与密钥").FontSize(12).TextColor(p.muted)
+		})
+		if ready {
+			chip(c, p, iconSignal, "Podcast Index 已启用", p.ok)
+		} else {
+			chip(c, p, iconSignal, "iTunes 搜索中", p.warn)
+		}
+	})
+	ui.Column(c).Gap(4).Children(func() {
+		ui.Text(c, "Podcast Index").FontSize(14).Bold()
+		ui.Text(c, "填写 API Key 和 API Secret，保存后用于后续搜索。清空两项可移除本机密钥。").FontSize(12).LineHeight(1.5).TextColor(p.muted)
+		if v.App.Settings.HasOverrides() {
+			ui.Text(c, "环境变量或 .env 中的密钥优先生效，此处仅修改本机保存的配置。").FontSize(12).LineHeight(1.5).TextColor(p.warn)
+		}
+	})
+	keyChanged := v.credentialField(c, p, "API Key", &v.settingsDraft.PodcastIndexKey)
+	secretChanged := v.credentialField(c, p, "API Secret", &v.settingsDraft.PodcastIndexSecret)
+	if keyChanged || secretChanged {
+		v.settingsErr, v.settingsMessage = "", ""
+	}
+	ui.Row(c).Gap(10).Children(func() {
+		reveal := ui.ButtonBase(c.Key("reveal")).Gap(6).Padding(5, 10, 5, 8).Radius(999)
+		if reveal.Hovered() {
+			reveal.Background(p.panelHi)
+		}
+		reveal.Children(func() {
+			glyph := iconEye
+			if v.showCredentials {
+				glyph = iconEyeOff
+			}
+			ui.Icon(c, glyph).FontSize(15).TextColor(p.muted)
+			ui.Text(c, "显示密钥").FontSize(12).TextColor(p.muted)
+		})
+		if reveal.Clicked() {
+			v.showCredentials = !v.showCredentials
+		}
+		ui.Spacer(c)
+		ui.Text(c, "密钥仅保存在本机。保存不会验证密钥是否有效。").FontSize(11).TextColor(p.faint).Shrink(1)
+	})
+	if v.settingsErr != "" {
+		ui.Row(c).Gap(6).Children(func() {
+			ui.Icon(c, iconAlert).FontSize(14).TextColor(p.danger)
+			ui.Text(c, v.settingsErr).FontSize(12).TextColor(p.danger)
+		})
+	}
+	if v.settingsMessage != "" {
+		ui.Row(c.Key("saved")).Gap(6).Transition(ui.ElementTransition{Animation: &pop, Enter: &ui.Motion{Y: 6, Opacity: 0}}).Children(func() {
+			ui.Icon(c, iconCheck).FontSize(14).TextColor(p.ok)
+			ui.Text(c, v.settingsMessage).FontSize(12).TextColor(p.ok)
+		})
+	}
+	ui.Row(c).Gap(10).Margin(4, 0, 0, 0).Justify(ui.End).Children(func() {
+		if pill(c, p, "close", nil, "关闭", false).Clicked() {
+			v.settingsOpen = false
+		}
+		if pill(c, p, "save", iconCheck, "保存", true).Clicked() {
+			v.saveSettings()
+		}
 	})
 }
 
@@ -78,10 +137,14 @@ func (v *View) saveSettings() {
 	}
 }
 
-func (v *View) credentialField(c *ui.Context, label string, value *string) bool {
+func (v *View) credentialField(c *ui.Context, p palette, label string, value *string) bool {
 	changed := false
 	ui.Field(c.Key(label), label, func() {
-		field := ui.TextInput(c, value).Placeholder("输入 " + label).FillWidth()
+		field := ui.TextInput(c, value).Placeholder("输入 "+label).FillWidth().MinHeight(40).Radius(12).Padding(9, 12).
+			Background(p.panel).Border(1, p.rim).FontFeatures("tnum")
+		if field.Focused() {
+			field.Border(1.5, p.accent).Shadow(0, 0, 0, 3, p.accent.Alpha(0.18))
+		}
 		if !v.showCredentials {
 			field.Password()
 		}

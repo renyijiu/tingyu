@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -36,6 +37,11 @@ type App struct {
 	ResultSource string
 	Searching    bool
 	SearchErr    string
+
+	// Chart is what most listen to now, for the Discover page.
+	Chart        []model.Podcast
+	chartLoading bool
+	chartFailed  time.Time
 
 	Subs     []model.Podcast
 	Selected *model.Podcast
@@ -80,7 +86,8 @@ func (a *App) Search() {
 			a.Searching = false
 			a.ResultSource = src
 			if err != nil {
-				a.SearchErr = err.Error()
+				log.Printf("search %q: %v", q, err)
+				a.SearchErr = Explain(err, "搜索失败，请稍后再试")
 				a.Results = nil
 				return
 			}
@@ -92,7 +99,37 @@ func (a *App) Search() {
 	})
 }
 
-// Open shows a podcast's episodes.
+// chartRetry is how long a chart that could not be loaded waits before it
+// is asked for again.
+const chartRetry = time.Minute
+
+// LoadChart loads the chart unless it is loaded or loading. One that cannot
+// be loaded leaves the Discover page as it was, and is asked for again a
+// minute later, the next time the page draws.
+func (a *App) LoadChart() {
+	if len(a.Chart) > 0 || a.chartLoading || a.Catalog == nil {
+		return
+	}
+	if !a.chartFailed.IsZero() && time.Since(a.chartFailed) < chartRetry {
+		return
+	}
+	a.chartLoading = true
+	cat := a.Catalog
+	a.async(func() {
+		shows, err := cat.Popular(context.Background())
+		a.publish(func() {
+			a.chartLoading = false
+			if err != nil || len(shows) == 0 {
+				a.chartFailed = time.Now()
+				return
+			}
+			a.Chart = shows
+		})
+	})
+}
+
+// Open shows a podcast's episodes. A show opened before shows at once as
+// it was, then as its feed has it now.
 func (a *App) Open(p model.Podcast) {
 	p.EnsureIDs()
 	a.Selected = &p
@@ -103,16 +140,27 @@ func (a *App) Open(p model.Podcast) {
 	gen := a.openGen
 	cat := a.Catalog
 	a.async(func() {
-		eps, err := cat.Episodes(context.Background(), p)
+		show, eps, err := cat.Episodes(context.Background(), p, func(show model.Podcast, eps []model.Episode) {
+			a.publish(func() {
+				if gen != a.openGen {
+					return
+				}
+				a.Loading = false
+				a.Selected = &show
+				a.Episodes = eps
+			})
+		})
 		a.publish(func() {
 			if gen != a.openGen {
 				return
 			}
 			a.Loading = false
 			if err != nil {
-				a.EpErr = err.Error()
+				log.Printf("episodes of %s: %v", p.FeedURL, err)
+				a.EpErr = Explain(err, "无法读取这个节目的单集")
 				return
 			}
+			a.Selected = &show
 			a.Episodes = eps
 			if len(eps) == 0 {
 				a.EpErr = "这个节目还没有可播放的单集"

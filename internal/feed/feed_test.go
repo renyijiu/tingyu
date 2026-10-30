@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -83,14 +84,68 @@ func TestFetchUsesFixtureServer(t *testing.T) {
 		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
-	_, eps, err := (&Fetcher{HTTP: srv.Client()}).Fetch(context.Background(), srv.URL)
+	res, err := (&Fetcher{HTTP: srv.Client()}).Fetch(context.Background(), srv.URL, Validators{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ua == "" {
 		t.Fatal("missing user agent")
 	}
-	if len(eps) != 3 {
-		t.Fatalf("%d episodes", len(eps))
+	if len(res.Episodes) != 3 || res.Show.Description != "中文播客" {
+		t.Fatalf("%d episodes, show %+v", len(res.Episodes), res.Show)
+	}
+}
+
+func TestFetchAsksWhetherTheFeedChanged(t *testing.T) {
+	body, err := os.ReadFile("testdata/show.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const etag, modified = `"v1"`, "Wed, 28 Oct 2026 10:00:00 GMT"
+	var asked []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.Header.Get("If-None-Match")+"|"+r.Header.Get("If-Modified-Since"))
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("ETag", etag)
+		w.Header().Set("Last-Modified", modified)
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+	f := &Fetcher{HTTP: srv.Client()}
+
+	first, err := f.Fetch(context.Background(), srv.URL, Validators{})
+	if err != nil || first.NotModified || len(first.Episodes) != 3 {
+		t.Fatalf("first fetch %v %+v", err, first)
+	}
+	if first.Validators != (Validators{ETag: etag, LastModified: modified}) {
+		t.Fatalf("validators %+v", first.Validators)
+	}
+	again, err := f.Fetch(context.Background(), srv.URL, first.Validators)
+	if err != nil || !again.NotModified || len(again.Episodes) != 0 || again.Validators != first.Validators {
+		t.Fatalf("second fetch %v %+v", err, again)
+	}
+	if asked[0] != "|" || asked[1] != etag+"|"+modified {
+		t.Fatalf("conditional headers %q", asked)
+	}
+}
+
+func TestFetchRefusesAFeedOverTheLimit(t *testing.T) {
+	body, err := os.ReadFile("testdata/show.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+	_, err = (&Fetcher{HTTP: srv.Client(), Limit: int64(len(body)) / 2}).Fetch(context.Background(), srv.URL, Validators{})
+	if err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("got %v, want a size error", err)
+	}
+	if _, err := (&Fetcher{HTTP: srv.Client(), Limit: int64(len(body))}).Fetch(context.Background(), srv.URL, Validators{}); err != nil {
+		t.Fatalf("a feed right at the limit: %v", err)
 	}
 }

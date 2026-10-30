@@ -87,17 +87,43 @@ func Parse(r io.Reader, feedURL string) (Show, []model.Episode, error) {
 	return show, eps, nil
 }
 
+// MaxSize is the largest feed Fetch reads unless told otherwise. Some shows
+// keep every episode in their feed and run to tens of megabytes.
+const MaxSize = 64 << 20
+
+// Validators identify the copy of a feed a client holds: the ETag and
+// Last-Modified its server sent with it.
+type Validators struct {
+	ETag         string `json:"etag,omitempty"`
+	LastModified string `json:"lastModified,omitempty"`
+}
+
+// Result is a fetched feed.
+type Result struct {
+	Show     Show
+	Episodes []model.Episode
+	// Validators identify this copy, for asking next time whether it
+	// changed.
+	Validators Validators
+	// NotModified says the feed has not changed since the copy the fetch
+	// named. Show and Episodes are then empty.
+	NotModified bool
+}
+
 // Fetcher downloads a feed and parses it.
 type Fetcher struct {
 	HTTP      *http.Client
 	UserAgent string
+	// Limit is the largest feed read, MaxSize when zero.
+	Limit int64
 }
 
-// Fetch downloads feedURL.
-func (f *Fetcher) Fetch(ctx context.Context, feedURL string) (Show, []model.Episode, error) {
+// Fetch downloads feedURL. With since set, a server that supports it
+// answers that the feed has not changed instead of sending it again.
+func (f *Fetcher) Fetch(ctx context.Context, feedURL string, since Validators) (Result, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
 	if err != nil {
-		return Show{}, nil, err
+		return Result{}, err
 	}
 	ua := f.UserAgent
 	if ua == "" {
@@ -105,19 +131,56 @@ func (f *Fetcher) Fetch(ctx context.Context, feedURL string) (Show, []model.Epis
 	}
 	req.Header.Set("User-Agent", ua)
 	req.Header.Set("Accept", "application/rss+xml, application/atom+xml, application/xml, text/xml, */*")
+	if since.ETag != "" {
+		req.Header.Set("If-None-Match", since.ETag)
+	}
+	if since.LastModified != "" {
+		req.Header.Set("If-Modified-Since", since.LastModified)
+	}
 	hc := f.HTTP
 	if hc == nil {
 		hc = &http.Client{Timeout: 30 * time.Second}
 	}
 	resp, err := hc.Do(req)
 	if err != nil {
-		return Show{}, nil, err
+		return Result{}, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Show{}, nil, fmt.Errorf("feed: HTTP %d", resp.StatusCode)
+	if resp.StatusCode == http.StatusNotModified && since != (Validators{}) {
+		return Result{NotModified: true, Validators: since}, nil
 	}
-	return Parse(io.LimitReader(resp.Body, 20<<20), feedURL)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return Result{}, fmt.Errorf("feed: HTTP %d", resp.StatusCode)
+	}
+	limit := f.Limit
+	if limit <= 0 {
+		limit = MaxSize
+	}
+	body := &counter{r: io.LimitReader(resp.Body, limit+1)}
+	show, eps, err := Parse(body, feedURL)
+	if body.n > limit {
+		return Result{}, fmt.Errorf("feed: larger than %d bytes", limit)
+	}
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{
+		Show:       show,
+		Episodes:   eps,
+		Validators: Validators{ETag: resp.Header.Get("ETag"), LastModified: resp.Header.Get("Last-Modified")},
+	}, nil
+}
+
+// counter counts the bytes read through it.
+type counter struct {
+	r io.Reader
+	n int64
+}
+
+func (c *counter) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
 }
 
 func pickEnclosure(item *gofeed.Item) *gofeed.Enclosure {

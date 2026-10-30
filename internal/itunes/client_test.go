@@ -97,3 +97,40 @@ func TestLiveSearch(t *testing.T) {
 		t.Logf("%q -> %s", term, shows[0].Title)
 	}
 }
+
+func TestTopKeepsChartOrderAndPlayableShows(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/cn/podcasts/top/3/podcasts.json":
+			_, _ = w.Write([]byte(`{"feed":{"results":[{"id":"30"},{"id":"10"},{"id":"20"}]}}`))
+		case "/lookup":
+			q := r.URL.Query()
+			if q.Get("id") != "30,10,20" || q.Get("entity") != "podcast" || q.Get("country") != "cn" {
+				t.Errorf("lookup %s", r.URL.RawQuery)
+			}
+			_, _ = w.Write([]byte(`{"results":[
+				{"wrapperType":"track","kind":"podcast","collectionId":10,"collectionName":"十","feedUrl":"https://example.com/10.xml"},
+				{"wrapperType":"track","kind":"podcast","collectionId":20,"collectionName":"二十"},
+				{"wrapperType":"track","kind":"podcast","collectionId":30,"collectionName":"三十","feedUrl":"https://example.com/30.xml","artworkUrl600":"https://img/30.jpg"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	c := &Client{BaseURL: srv.URL, ChartsURL: srv.URL, HTTP: srv.Client()}
+	shows, err := c.Top(context.Background(), "cn", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shows) != 2 || shows[0].Title != "三十" || shows[1].Title != "十" {
+		t.Fatalf("%+v", shows)
+	}
+	if shows[0].ITunesID != 30 || shows[0].Image != "https://img/30.jpg" || shows[0].ID == "" {
+		t.Fatalf("%+v", shows[0])
+	}
+
+	c.ChartsURL = srv.URL + "/gone"
+	if _, err := c.Top(context.Background(), "cn", 3); err == nil {
+		t.Fatal("a missing chart loaded")
+	}
+}

@@ -38,8 +38,8 @@ func (fakeIT) Episodes(context.Context, int64) ([]model.Episode, error) {
 
 type fakeFeed struct{ eps []model.Episode }
 
-func (f fakeFeed) Fetch(context.Context, string) (feed.Show, []model.Episode, error) {
-	return feed.Show{}, f.eps, nil
+func (f fakeFeed) Fetch(context.Context, string, feed.Validators) (feed.Result, error) {
+	return feed.Result{Episodes: append([]model.Episode(nil), f.eps...)}, nil
 }
 
 type fakeEngine struct{ h *fakeHandle }
@@ -189,5 +189,35 @@ func TestEmptyQueryDiscardsPendingSearch(t *testing.T) {
 	}
 	if len(a.Results) != 0 || a.ResultSource != "" || a.SearchErr != "请输入关键词" {
 		t.Fatalf("old search changed cleared state: results=%+v source=%q error=%q", a.Results, a.ResultSource, a.SearchErr)
+	}
+}
+
+type countingCharts struct {
+	calls *int
+	shows []model.Podcast
+	err   error
+}
+
+func (c countingCharts) Top(context.Context, string, int) ([]model.Podcast, error) {
+	*c.calls++
+	return c.shows, c.err
+}
+
+func TestLoadChartAsksAgainOnlyAfterAWhile(t *testing.T) {
+	calls := 0
+	a := New(nil, &catalog.Catalog{Charts: countingCharts{calls: &calls, err: errors.New("itunes: HTTP 403")}}, nil)
+	a.Sync = true
+	a.LoadChart()
+	a.LoadChart()
+	if calls != 1 || len(a.Chart) != 0 {
+		t.Fatalf("failed chart asked %d times right away, chart %+v", calls, a.Chart)
+	}
+
+	a.chartFailed = time.Now().Add(-chartRetry)
+	a.Catalog.Charts = countingCharts{calls: &calls, shows: []model.Podcast{{Title: "声动早咖啡"}}}
+	a.LoadChart()
+	a.LoadChart()
+	if calls != 2 || len(a.Chart) != 1 {
+		t.Fatalf("retry: %d calls, chart %+v", calls, a.Chart)
 	}
 }

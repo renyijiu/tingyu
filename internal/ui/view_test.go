@@ -38,8 +38,8 @@ func (itunes) Episodes(context.Context, int64) ([]model.Episode, error) {
 
 type feeds struct{ eps []model.Episode }
 
-func (f feeds) Fetch(context.Context, string) (feed.Show, []model.Episode, error) {
-	return feed.Show{}, f.eps, nil
+func (f feeds) Fetch(context.Context, string, feed.Validators) (feed.Result, error) {
+	return feed.Result{Episodes: append([]model.Episode(nil), f.eps...)}, nil
 }
 
 type handle struct {

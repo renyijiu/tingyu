@@ -42,6 +42,7 @@ func (c *Client) Search(ctx context.Context, query string) ([]model.Podcast, err
 	q := url.Values{}
 	q.Set("q", query)
 	q.Set("max", "25")
+	q.Set("fulltext", "")
 	var body searchResponse
 	if err := c.get(ctx, "/search/byterm", q, &body); err != nil {
 		return nil, err
@@ -60,7 +61,8 @@ func (c *Client) Episodes(ctx context.Context, feedID int64) ([]model.Episode, e
 	}
 	q := url.Values{}
 	q.Set("id", strconv.FormatInt(feedID, 10))
-	q.Set("max", "200")
+	q.Set("max", "1000")
+	q.Set("fulltext", "")
 	var body episodeResponse
 	if err := c.get(ctx, "/episodes/byfeedid", q, &body); err != nil {
 		return nil, err

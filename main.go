@@ -13,6 +13,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/renyijiu/tingyu/internal/app"
+	"github.com/renyijiu/tingyu/internal/artwork"
 	"github.com/renyijiu/tingyu/internal/catalog"
 	"github.com/renyijiu/tingyu/internal/config"
 	"github.com/renyijiu/tingyu/internal/feed"
@@ -42,7 +43,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("无法读取订阅库 %s: %v", filepath.Join(dir, "library.json"), err)
 	}
-	cat := &catalog.Catalog{ITunes: &itunes.Client{}, Feeds: &feed.Fetcher{}}
+	apple := &itunes.Client{}
+	cat := &catalog.Catalog{
+		ITunes: apple,
+		Charts: apple,
+		Feeds:  &feed.Fetcher{},
+		Cache:  &catalog.DiskCache{Dir: filepath.Join(media.CacheDir(dir), "feeds")},
+	}
 	playback := &player.Controller{
 		Engine: mygoengine.New(),
 		Open: func(ctx context.Context, audioURL string) (io.ReadSeeker, error) {
@@ -59,16 +66,20 @@ func main() {
 			application.OnUI(func() {})
 		}
 	}
-	view := &tingui.View{App: application}
+	view := &tingui.View{
+		App:    application,
+		Covers: &artwork.Loader{Dir: filepath.Join(media.CacheDir(dir), "covers")},
+	}
 	mygo.App.WhenReady(func() {
 		mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { playback.Close() })
 		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:     "听宇",
-			Width:     1100,
-			Height:    740,
-			MinWidth:  860,
-			MinHeight: 560,
-			Content:   ui.View(view.Build),
+			Title:         "听宇",
+			Width:         1100,
+			Height:        740,
+			MinWidth:      860,
+			MinHeight:     560,
+			TitleBarStyle: mygo.TitleBarHidden,
+			Content:       ui.View(view.Build),
 		})
 		application.OnUI = func(fn func()) { win.Update(fn) }
 		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
