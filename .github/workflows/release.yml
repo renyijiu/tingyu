@@ -1,0 +1,35 @@
+name: Release
+
+# Pushing a tag such as v0.1.0 builds the app for Apple silicon and Intel
+# Macs and drafts a GitHub release with its disk image. The draft is
+# published by hand, after a look at its notes.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Tag matches the version
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          got="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' mygo.json)"
+          test "$want" = "$got" || { echo "tag $GITHUB_REF_NAME, but mygo.json says $got"; exit 1; }
+      - name: Test
+        run: go test ./...
+      - name: Package the app
+        run: go tool mygo build -platform darwin/universal
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" build/darwin-universal/*.dmg --draft --generate-notes --title "听宇 $GITHUB_REF_NAME"

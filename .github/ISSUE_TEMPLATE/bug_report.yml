@@ -1,0 +1,63 @@
+name: 问题反馈
+description: 崩溃、放不了、搜不到、显示不对
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        谢谢反馈，中文英文都可以。English is welcome.
+        安全问题请不要在这里公开，按 [SECURITY.md](https://github.com/renyijiu/tingyu/blob/main/SECURITY.md) 私下报告。
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 看到了什么，你原本期望的是什么。截图可以直接贴进来。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 怎么重现
+      placeholder: |
+        1. 在「发现」里搜索……
+        2. 打开……
+        3. 点播放后……
+    validations:
+      required: true
+  - type: input
+    id: show
+    attributes:
+      label: 节目或单集
+      description: 和某个节目有关时，贴它的 RSS 地址或 Apple 播客链接。
+  - type: input
+    id: version
+    attributes:
+      label: 听宇版本
+      description: 在访达里选中「听宇」按 ⌘I 可以看到。自己编译的写提交号。
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS 版本和芯片
+      placeholder: macOS 15.1，Apple M2
+    validations:
+      required: true
+  - type: dropdown
+    id: index
+    attributes:
+      label: 配置了 Podcast Index 密钥吗
+      description: 只选有没有，不要贴密钥。
+      options:
+        - 没有，只用 iTunes
+        - 配置了
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: 日志
+      description: |
+        在终端里运行 `"/Applications/听宇.app/Contents/MacOS/听宇"` 打开听宇，重现一次，把终端里的输出贴在这里。贴之前看一眼，去掉不想公开的内容。
+      render: text

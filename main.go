@@ -20,6 +20,7 @@ import (
 	"github.com/renyijiu/tingyu/internal/itunes"
 	"github.com/renyijiu/tingyu/internal/media"
 	"github.com/renyijiu/tingyu/internal/model"
+	"github.com/renyijiu/tingyu/internal/nowplaying"
 	"github.com/renyijiu/tingyu/internal/paths"
 	"github.com/renyijiu/tingyu/internal/player"
 	"github.com/renyijiu/tingyu/internal/player/mygoengine"
@@ -43,17 +44,27 @@ func main() {
 	if err != nil {
 		log.Fatalf("无法读取订阅库 %s: %v", filepath.Join(dir, "library.json"), err)
 	}
+	cache, err := paths.CacheDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := paths.MoveCache(dir, cache); err != nil {
+		log.Printf("move cache: %v", err)
+	}
+	if err := media.Tidy(cache); err != nil {
+		log.Printf("tidy cache: %v", err)
+	}
 	apple := &itunes.Client{}
 	cat := &catalog.Catalog{
 		ITunes: apple,
 		Charts: apple,
 		Feeds:  &feed.Fetcher{},
-		Cache:  &catalog.DiskCache{Dir: filepath.Join(media.CacheDir(dir), "feeds")},
+		Cache:  &catalog.DiskCache{Dir: filepath.Join(cache, "feeds")},
 	}
 	playback := &player.Controller{
 		Engine: mygoengine.New(),
 		Open: func(ctx context.Context, audioURL string) (io.ReadSeeker, error) {
-			return media.Open(ctx, nil, audioURL, media.CacheDir(dir))
+			return media.Open(ctx, nil, audioURL, cache)
 		},
 		Save: func(key string, pos, dur time.Duration) error {
 			return lib.SaveProgress(key, model.Progress{Position: pos, Duration: dur})
@@ -61,17 +72,27 @@ func main() {
 	}
 	application := app.New(lib, cat, playback)
 	application.Configure(dir, settings)
-	playback.OnChange = func() {
+	redraw := func() {
 		if application.OnUI != nil {
 			application.OnUI(func() {})
 		}
 	}
+	playback.OnChange = redraw
+	covers := &artwork.Loader{Dir: filepath.Join(cache, "covers")}
+	// The media keys and Control Center drive the player; the window tells
+	// them what plays as it draws.
+	controls := &nowplaying.Bridge{System: mygo.NowPlaying, Player: playback, Covers: covers, Changed: redraw}
+	mygo.NowPlaying.OnCommand(controls.Command)
 	view := &tingui.View{
-		App:    application,
-		Covers: &artwork.Loader{Dir: filepath.Join(media.CacheDir(dir), "covers")},
+		App:        application,
+		Covers:     covers,
+		NowPlaying: controls,
 	}
 	mygo.App.WhenReady(func() {
-		mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { playback.Close() })
+		mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+			playback.Close()
+			mygo.NowPlaying.Clear()
+		})
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:         "听宇",
 			Width:         1100,

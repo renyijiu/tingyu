@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestStreamBeforeDownloadFinishes(t *testing.T) {
@@ -176,4 +178,95 @@ func TestHashStable(t *testing.T) {
 	if hashName("https://cdn/a.mp3") == hashName("https://cdn/b.mp3") {
 		t.Fatal("collision")
 	}
+}
+
+func TestPruneRemovesWhatWasUsedLongestAgo(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	old := writeAudio(t, dir, "old"+audioExt, 40, now.Add(-3*time.Hour))
+	mid := writeAudio(t, dir, "mid"+audioExt, 40, now.Add(-2*time.Hour))
+	recent := writeAudio(t, dir, "recent"+audioExt, 40, now.Add(-time.Hour))
+	other := writeAudio(t, dir, "feeds.json", 500, now.Add(-4*time.Hour))
+	if err := Prune(dir, 90, ""); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]bool{old: false, mid: true, recent: true, other: true} {
+		if _, err := os.Stat(path); (err == nil) != want {
+			t.Errorf("%s kept=%v, want %v", filepath.Base(path), err == nil, want)
+		}
+	}
+}
+
+func TestPruneKeepsTheFileJustPlayed(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	big := writeAudio(t, dir, "big"+audioExt, 200, now.Add(-time.Hour))
+	small := writeAudio(t, dir, "small"+audioExt, 10, now)
+	if err := Prune(dir, 100, big); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(big); err != nil {
+		t.Errorf("file just played was removed: %v", err)
+	}
+	if _, err := os.Stat(small); err == nil {
+		t.Errorf("older audio kept while over the limit")
+	}
+}
+
+func TestReplayCountsAsUse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("audio-bytes"))
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	url := srv.URL + "/a.mp3"
+	path := writeAudio(t, dir, hashName(url), 11, time.Now().Add(-48*time.Hour))
+	r, err := Open(context.Background(), srv.Client(), url, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Close()
+	st, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if time.Since(st.ModTime()) > time.Hour {
+		t.Errorf("replayed audio still looks unused: %v", st.ModTime())
+	}
+}
+
+func TestTidyRemovesUnfinishedDownloads(t *testing.T) {
+	dir := t.TempDir()
+	part := writeAudio(t, dir, "abc"+audioExt+".part-123", 10, time.Now())
+	done := writeAudio(t, dir, "abc"+audioExt, 10, time.Now())
+	if err := os.MkdirAll(filepath.Join(dir, "covers"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := Tidy(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(part); err == nil {
+		t.Error("unfinished download left behind")
+	}
+	if _, err := os.Stat(done); err != nil {
+		t.Errorf("finished audio removed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "covers")); err != nil {
+		t.Errorf("covers removed: %v", err)
+	}
+	if err := Tidy(filepath.Join(dir, "missing")); err != nil {
+		t.Errorf("missing cache: %v", err)
+	}
+}
+
+func writeAudio(t *testing.T, dir, name string, size int, used time.Time) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, make([]byte, size), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, used, used); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

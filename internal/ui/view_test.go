@@ -187,3 +187,56 @@ func TestViewSearchSubscribeAndPlay(t *testing.T) {
 		t.Fatal("still subscribed")
 	}
 }
+
+func TestSpacePlaysAndPausesOutsideTextFields(t *testing.T) {
+	show := model.Podcast{Title: "故事会", FeedURL: "https://example.com/gushi.xml"}
+	show.EnsureIDs()
+	ep := model.Episode{Title: "第一集", GUID: "ep-1", AudioURL: "https://cdn.example.com/1.mp3"}
+	ep.EnsureID(show.FeedURL)
+	a := app.New(nil, &catalog.Catalog{Feeds: feeds{eps: []model.Episode{ep}}}, &player.Controller{
+		Engine: &engine{},
+		Open: func(context.Context, string) (io.ReadSeeker, error) {
+			return bytes.NewReader([]byte("abc")), nil
+		},
+	})
+	a.Sync = true
+	v := &View{App: a}
+	tt := ui.NewTester(v.Build, 1100, 760)
+
+	// Nothing plays: Space is left to the page.
+	tt.Key(0, ui.KeySpace)
+	if a.Player.State().Episode != nil {
+		t.Fatal("space started something")
+	}
+
+	v.show(show)
+	tt.Frame()
+	if err := tt.Click("第一集"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Player.State().Playing {
+		t.Fatal("episode did not play")
+	}
+	tt.Key(0, ui.KeySpace)
+	if a.Player.State().Playing {
+		t.Fatal("space did not pause")
+	}
+	tt.Key(0, ui.KeySpace)
+	if !a.Player.State().Playing {
+		t.Fatal("space did not resume")
+	}
+
+	// In the search field Space types a space.
+	if err := tt.Click("发现"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("搜索播客"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("故事")
+	tt.TypeKey(0, ui.KeySpace, " ")
+	tt.Type("会")
+	if a.Query != "故事 会" || !a.Player.State().Playing {
+		t.Fatalf("query %q playing %v", a.Query, a.Player.State().Playing)
+	}
+}

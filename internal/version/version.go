@@ -1,4 +1,5 @@
-// Package version is the app version shared by the User-Agent and mygo.json.
+// Package version is the app version the User-Agent sends. mygo.json holds
+// it too, for the bundle; a test keeps the two the same.
 package version
 
 // Version is the Tingyu release shown to Podcast Index and in the about line.

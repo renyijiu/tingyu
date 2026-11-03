@@ -39,9 +39,9 @@ func (v *View) sidebar(c *ui.Context, p palette, st player.State, reduce bool) {
 				for _, show := range v.App.Subs {
 					v.subRow(c, p, show)
 				}
-				if len(v.recent) > 0 {
+				if len(v.App.Recent) > 0 {
 					v.section(c, p, iconHistory, "最近播放", 0)
-					for _, item := range v.recent {
+					for _, item := range v.App.Recent {
 						v.recentRow(c, p, st, item, reduce)
 					}
 				}
@@ -155,7 +155,7 @@ func (v *View) subRow(c *ui.Context, p palette, show model.Podcast) {
 	}
 }
 
-func (v *View) recentRow(c *ui.Context, p palette, st player.State, item recentPlay, reduce bool) {
+func (v *View) recentRow(c *ui.Context, p palette, st player.State, item model.Play, reduce bool) {
 	current := st.Episode != nil && st.Episode.ID == item.Episode.ID
 	row := ui.ButtonBase(c.Key("recent:"+item.Episode.ID)).FillWidth().Radius(12).Padding(6, 10).Gap(10)
 	v.rowLight(row, p, false)

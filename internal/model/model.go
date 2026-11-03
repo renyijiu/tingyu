@@ -44,6 +44,13 @@ type Episode struct {
 	Image       string        `json:"image,omitempty"`
 }
 
+// Play is an episode played, with its show, as the sidebar lists it under
+// 最近播放.
+type Play struct {
+	Show    Podcast `json:"show"`
+	Episode Episode `json:"episode"`
+}
+
 // Progress is how far the user got in an episode.
 type Progress struct {
 	Position time.Duration `json:"position"`

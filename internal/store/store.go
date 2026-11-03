@@ -1,4 +1,5 @@
-// Package store persists subscriptions and playback progress as one JSON file.
+// Package store persists subscriptions, playback progress and the episodes
+// played most recently as one JSON file.
 package store
 
 import (
@@ -26,7 +27,11 @@ type Store struct {
 type fileData struct {
 	Subscriptions []model.Podcast           `json:"subscriptions"`
 	Progress      map[string]model.Progress `json:"progress,omitempty"`
+	Recent        []model.Play              `json:"recent,omitempty"`
 }
+
+// MaxRecent is how many episodes Recent remembers.
+const MaxRecent = 6
 
 // Open loads the library in dir, creating the directory if needed.
 // A missing file starts empty. Corrupt JSON is returned as an error so a
@@ -132,6 +137,37 @@ func (s *Store) SaveProgress(key string, p model.Progress) error {
 		p.Updated = time.Now().UTC()
 	}
 	next.Progress[key] = p
+	return s.saveLocked(next)
+}
+
+// Recent returns the episodes played most recently, newest first.
+func (s *Store) Recent() []model.Play {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.data.Recent)
+}
+
+// AddRecent puts an episode first among those played most recently. The
+// descriptions are left out: the list only names what played, and opening
+// the show reads them again.
+func (s *Store) AddRecent(p model.Play) error {
+	if p.Episode.ID == "" {
+		return errors.New("store: empty episode key")
+	}
+	p.Show.Description = ""
+	p.Episode.Description = ""
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.data
+	next.Recent = []model.Play{p}
+	for _, old := range s.data.Recent {
+		if len(next.Recent) >= MaxRecent {
+			break
+		}
+		if old.Episode.ID != p.Episode.ID {
+			next.Recent = append(next.Recent, old)
+		}
+	}
 	return s.saveLocked(next)
 }
 
