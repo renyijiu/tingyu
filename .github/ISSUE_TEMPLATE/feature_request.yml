@@ -1,0 +1,26 @@
+name: 功能建议
+description: 想让听宇多做点什么
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        README 的「还没做，欢迎认领」里列了已经想到的功能。你想要的在里面的话，也可以在这里说说你会怎么用它，或者直接认领。
+  - type: textarea
+    id: need
+    attributes:
+      label: 想做到什么
+      description: 听播客时遇到了什么事，不用先想好怎么实现。
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: 设想的做法
+      description: 界面上大概怎么用，或者参考了哪个 App 的做法。
+  - type: checkboxes
+    id: claim
+    attributes:
+      label: 自己来做
+      options:
+        - label: 我想自己写这个功能，动手前会在这里说明打算怎么做

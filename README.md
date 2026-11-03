@@ -159,7 +159,7 @@ CI 还会检查 `gofmt`、用 govulncheck 查已知漏洞，并确认第三方�
 
 ## 参与
 
-欢迎提 issue 和 PR，先看看[参与说明](CONTRIBUTING.md)。
+欢迎提 issue 和 PR，先看看[参与说明](CONTRIBUTING.md)。安全问题请按 [SECURITY.md](SECURITY.md) 私下报告，不要公开提 issue。
 
 ## 许可
 

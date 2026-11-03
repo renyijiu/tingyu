@@ -24,3 +24,5 @@ go test -race ./...
 ## 密钥
 
 不要提交 Podcast Index 的密钥。`.env` 和 `config.json` 已在 `.gitignore` 里。
+
+发现安全问题请按 [SECURITY.md](SECURITY.md) 私下报告。

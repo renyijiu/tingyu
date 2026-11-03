@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 报告安全问题
+    url: https://github.com/renyijiu/tingyu/security/advisories/new
+    about: 不要公开提 issue，在这里私下报告，只有维护者能看到。
