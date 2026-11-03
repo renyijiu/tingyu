@@ -26,7 +26,7 @@ func TestSettingsEntryStaysBelowLibrary(t *testing.T) {
 			}
 			if count > 0 {
 				for i := 0; i < 6; i++ {
-					v.recent = append(v.recent, recentPlay{Episode: model.Episode{ID: fmt.Sprint(i), Title: fmt.Sprintf("最近单集 %d", i)}})
+					v.App.Recent = append(v.App.Recent, model.Play{Episode: model.Episode{ID: fmt.Sprint(i), Title: fmt.Sprintf("最近单集 %d", i)}})
 				}
 			}
 			tt := ui.NewTester(v.Build, 860, 560)

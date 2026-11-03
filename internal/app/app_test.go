@@ -105,7 +105,7 @@ func TestSubscribeSearchPlay(t *testing.T) {
 	if a.Loading || len(a.Episodes) != 1 || a.Episodes[0].Title != "第一集" {
 		t.Fatalf("eps %+v %s", a.Episodes, a.EpErr)
 	}
-	a.PlayEpisode(a.Episodes[0])
+	a.PlayEpisode(model.Podcast{}, a.Episodes[0])
 	if !a.Player.State().Playing || eng.h.pos != 0 {
 		t.Fatalf("play %+v pos %v", a.Player.State(), eng.h.pos)
 	}
@@ -115,13 +115,13 @@ func TestSubscribeSearchPlay(t *testing.T) {
 	if !ok || prog.Position != 2*time.Minute {
 		t.Fatalf("progress %+v %v", prog, ok)
 	}
-	a.PlayEpisode(a.Episodes[0])
+	a.PlayEpisode(model.Podcast{}, a.Episodes[0])
 	if eng.h.pos != 2*time.Minute {
 		t.Fatalf("resume %v", eng.h.pos)
 	}
 	eng.h.pos = 30*time.Minute - time.Second
 	a.Toggle()
-	a.PlayEpisode(a.Episodes[0])
+	a.PlayEpisode(model.Podcast{}, a.Episodes[0])
 	if eng.h.pos != 0 {
 		t.Fatalf("near end should restart, pos %v", eng.h.pos)
 	}
@@ -137,6 +137,12 @@ func TestSubscribeSearchPlay(t *testing.T) {
 	}
 	if len(re.Subscriptions()) != 0 {
 		t.Fatal("subscription survived")
+	}
+	// What played is listed again after a restart, under the show it
+	// played from.
+	again := New(re, cat, pl)
+	if len(again.Recent) != 1 || again.Recent[0].Episode.ID != ep.ID || again.Recent[0].Show.ID != show.ID {
+		t.Fatalf("recent after restart %+v", again.Recent)
 	}
 	if _, ok := re.Progress(ep.ID); !ok {
 		t.Fatal("progress should remain after unsubscribe")

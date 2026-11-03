@@ -3,7 +3,7 @@
 // Playback can start before the download finishes. Bytes that are not on
 // disk yet block the reader. A finished file is reused from the cache, which
 // is how seek and resume stay local. This is a play cache, not a download
-// manager.
+// manager: it keeps the episodes played most recently, up to MaxCache.
 package media
 
 import (
@@ -16,7 +16,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/renyijiu/tingyu/internal/version"
 )
@@ -34,6 +37,9 @@ func Open(ctx context.Context, client *http.Client, audioURL, cacheDir string) (
 		if err != nil {
 			return nil, err
 		}
+		// Playing it again counts as using it, so it is pruned last.
+		now := time.Now()
+		_ = os.Chtimes(final, now, now)
 		return f, nil
 	}
 	f, err := os.CreateTemp(cacheDir, name+".part-")
@@ -57,7 +63,7 @@ func Open(ctx context.Context, client *http.Client, audioURL, cacheDir string) (
 
 func hashName(audioURL string) string {
 	sum := sha256.Sum256([]byte(audioURL))
-	return hex.EncodeToString(sum[:]) + ".audio"
+	return hex.EncodeToString(sum[:]) + audioExt
 }
 
 // Reader is a growing file. Read blocks until the download reaches the offset.
@@ -86,7 +92,9 @@ func (r *Reader) download(ctx context.Context, client *http.Client, audioURL str
 		_ = r.file.Sync()
 		// Rename keeps the open descriptor on the same inode, so playback
 		// can continue while the next play finds the finished file.
-		_ = os.Rename(r.file.Name(), r.final)
+		if os.Rename(r.file.Name(), r.final) == nil {
+			_ = Prune(filepath.Dir(r.final), MaxCache, r.final)
+		}
 	} else if r.file != nil {
 		name := r.file.Name()
 		_ = os.Remove(name)
@@ -239,7 +247,67 @@ func (r *Reader) Close() error {
 	return r.file.Close()
 }
 
-// CacheDir is the play cache under the data directory.
-func CacheDir(dataDir string) string {
-	return filepath.Join(dataDir, "cache")
+// MaxCache is how many bytes of played audio the cache keeps: some twenty
+// to forty episodes.
+const MaxCache = 2 << 30
+
+const audioExt = ".audio"
+
+// Prune removes the audio used longest ago until what is left fits in
+// limit. keep, the file just played, stays whatever its size.
+func Prune(dir string, limit int64, keep string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	type file struct {
+		path string
+		size int64
+		used time.Time
+	}
+	var files []file
+	var total int64
+	for _, de := range entries {
+		if de.IsDir() || !strings.HasSuffix(de.Name(), audioExt) {
+			continue
+		}
+		info, err := de.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, file{filepath.Join(dir, de.Name()), info.Size(), info.ModTime()})
+		total += info.Size()
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].used.Before(files[j].used) })
+	for _, f := range files {
+		if total <= limit {
+			break
+		}
+		if f.path == keep {
+			continue
+		}
+		if err := os.Remove(f.path); err == nil {
+			total -= f.size
+		}
+	}
+	return nil
+}
+
+// Tidy runs at launch, before anything plays: it removes the downloads a
+// quit or crash cut short, which no one will finish, and prunes the cache
+// to MaxCache.
+func Tidy(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, de := range entries {
+		if !de.IsDir() && strings.Contains(de.Name(), audioExt+".part-") {
+			_ = os.Remove(filepath.Join(dir, de.Name()))
+		}
+	}
+	return Prune(dir, MaxCache, "")
 }

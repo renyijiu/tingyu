@@ -1,5 +1,5 @@
 // Package catalog chooses where a search or an episode list comes from.
-// Podcast Index is preferred. iTunes fills in when it is unavailable or empty.
+// A search asks Podcast Index and iTunes at once and merges what they find.
 // Episode lists prefer the show's own RSS feed, and the last one loaded of
 // each show is kept to open it at once.
 package catalog

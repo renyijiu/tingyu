@@ -12,6 +12,7 @@ import (
 	"github.com/renyijiu/tingyu/internal/artwork"
 	"github.com/renyijiu/tingyu/internal/config"
 	"github.com/renyijiu/tingyu/internal/model"
+	"github.com/renyijiu/tingyu/internal/nowplaying"
 	"github.com/renyijiu/tingyu/internal/player"
 )
 
@@ -22,6 +23,9 @@ type View struct {
 	// Covers loads cover images. Without one, covers are downloaded each
 	// time the window opens.
 	Covers *artwork.Loader
+	// NowPlaying, if set, is told what plays as the window draws, for the
+	// system's media controls.
+	NowPlaying *nowplaying.Bridge
 
 	art        *artCache
 	sky        cosmos
@@ -32,7 +36,6 @@ type View struct {
 	seek       float64
 	expanded   bool
 	home       bool
-	recent     []recentPlay
 	libraryErr error
 
 	// burst is when a subscription last went through, for its sparkles.
@@ -48,15 +51,26 @@ type View struct {
 	settingsMessage string
 }
 
-type recentPlay struct {
-	Show    model.Podcast
-	Episode model.Episode
-}
-
 // Build draws one frame.
 func (v *View) Build(c *ui.Context) {
 	p := theme(c)
+	root := ui.Column(c).Fill()
+	if v.App.Player.State().Episode != nil {
+		// Space plays and pauses, as in other players, but in a text
+		// field, which types it. The root takes it from a focused button,
+		// which would press it again, and the window when nothing has the
+		// focus.
+		inside := root.Shortcut(0, ui.KeySpace)
+		window := c.Shortcut(0, ui.KeySpace)
+		if inside || window {
+			v.App.Toggle()
+		}
+	}
 	st := v.App.Player.State()
+	if v.NowPlaying != nil {
+		img, show := v.playingArt(st)
+		v.NowPlaying.Sync(st, img, show)
+	}
 	reduce := c.Preferences().ReduceMotion
 	if st.Playing || st.Buffering {
 		// The clock and the scrubber move a pixel every few seconds: four
@@ -68,7 +82,6 @@ func (v *View) Build(c *ui.Context) {
 	}
 	v.sky.flow(st.Playing && !reduce, c.Now())
 
-	root := ui.Column(c).Fill()
 	tint := root.AnimateColor("tint", v.skyTint(p, st), ui.Animation{Duration: 1200 * time.Millisecond, Ease: ui.EaseInOut})
 	energy := float32(0)
 	if st.Playing {
@@ -145,22 +158,7 @@ func (v *View) show(show model.Podcast) {
 }
 
 func (v *View) play(show model.Podcast, ep model.Episode) {
-	if show.ID == "" && v.App.Selected != nil {
-		show = *v.App.Selected
-	}
-	v.remember(show, ep)
-	v.App.PlayEpisode(ep)
-}
-
-func (v *View) remember(show model.Podcast, ep model.Episode) {
-	next := []recentPlay{{Show: show, Episode: ep}}
-	for _, item := range v.recent {
-		if item.Episode.ID == ep.ID || len(next) >= 6 {
-			continue
-		}
-		next = append(next, item)
-	}
-	v.recent = next
+	v.App.PlayEpisode(show, ep)
 }
 
 // playingArt is the cover and show title of what plays: the episode's own
@@ -170,7 +168,7 @@ func (v *View) playingArt(st player.State) (image, show string) {
 		return "", ""
 	}
 	image, show = st.Episode.Image, st.ShowTitle
-	for _, item := range v.recent {
+	for _, item := range v.App.Recent {
 		if item.Episode.ID == st.Episode.ID {
 			if image == "" {
 				image = item.Show.Image

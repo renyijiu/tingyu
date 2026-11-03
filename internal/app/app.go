@@ -43,7 +43,9 @@ type App struct {
 	chartLoading bool
 	chartFailed  time.Time
 
-	Subs     []model.Podcast
+	Subs []model.Podcast
+	// Recent is what played last, newest first, kept across launches.
+	Recent   []model.Play
 	Selected *model.Podcast
 	Episodes []model.Episode
 	Loading  bool
@@ -58,6 +60,7 @@ func New(st *store.Store, cat *catalog.Catalog, pl *player.Controller) *App {
 	a := &App{Store: st, Catalog: cat, Player: pl}
 	if st != nil {
 		a.Subs = st.Subscriptions()
+		a.Recent = st.Recent()
 	}
 	return a
 }
@@ -200,15 +203,17 @@ func (a *App) Subscribed(id string) bool {
 	return a.Store != nil && a.Store.IsSubscribed(id)
 }
 
-// PlayEpisode starts playback from the saved position.
-func (a *App) PlayEpisode(ep model.Episode) {
+// PlayEpisode starts playback from the saved position and puts the
+// episode first among those played recently. A show without an id is the
+// one open.
+func (a *App) PlayEpisode(show model.Podcast, ep model.Episode) {
 	if a.Player == nil {
 		return
 	}
-	show := ""
-	if a.Selected != nil {
-		show = a.Selected.Title
+	if show.ID == "" && a.Selected != nil {
+		show = *a.Selected
 	}
+	a.remember(show, ep)
 	var resume model.Progress
 	if a.Store != nil {
 		if p, ok := a.Store.Progress(ep.ID); ok {
@@ -218,9 +223,33 @@ func (a *App) PlayEpisode(ep model.Episode) {
 	at := model.ResumeFrom(resume)
 	epCopy := ep
 	a.async(func() {
-		a.Player.Play(context.Background(), show, epCopy, at)
+		a.Player.Play(context.Background(), show.Title, epCopy, at)
 		a.publish(func() {})
 	})
+}
+
+// remember lists the episode first under 最近播放. A list that cannot be
+// saved still shows it until the app quits.
+func (a *App) remember(show model.Podcast, ep model.Episode) {
+	play := model.Play{Show: show, Episode: ep}
+	if a.Store != nil {
+		if err := a.Store.AddRecent(play); err != nil {
+			log.Printf("recent %s: %v", ep.ID, err)
+		} else {
+			a.Recent = a.Store.Recent()
+			return
+		}
+	}
+	next := []model.Play{play}
+	for _, old := range a.Recent {
+		if len(next) >= store.MaxRecent {
+			break
+		}
+		if old.Episode.ID != ep.ID {
+			next = append(next, old)
+		}
+	}
+	a.Recent = next
 }
 
 // Toggle pauses or resumes.

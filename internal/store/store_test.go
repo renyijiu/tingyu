@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -175,4 +176,45 @@ func find(t *testing.T, list []model.Podcast, id string) model.Podcast {
 	}
 	t.Fatalf("missing %s", id)
 	return model.Podcast{}
+}
+
+func TestRecentPersistsNewestFirst(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	show := model.Podcast{ID: "feed:a", Title: "故事会", Description: "很长的简介"}
+	play := func(id string) model.Play {
+		return model.Play{Show: show, Episode: model.Episode{ID: id, Title: "第 " + id + " 集", Description: "单集简介"}}
+	}
+	for i := 0; i < MaxRecent+2; i++ {
+		if err := s.AddRecent(play(fmt.Sprint(i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Playing one again moves it first instead of listing it twice.
+	if err := s.AddRecent(play("4")); err != nil {
+		t.Fatal(err)
+	}
+	re, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, p := range re.Recent() {
+		ids = append(ids, p.Episode.ID)
+		if p.Show.Description != "" || p.Episode.Description != "" {
+			t.Errorf("descriptions kept: %+v", p)
+		}
+		if p.Show.Title != "故事会" {
+			t.Errorf("show lost: %+v", p.Show)
+		}
+	}
+	if want := []string{"4", "7", "6", "5", "3", "2"}; !reflect.DeepEqual(ids, want) {
+		t.Fatalf("recent %v, want %v", ids, want)
+	}
+	if err := s.AddRecent(model.Play{}); err == nil {
+		t.Fatal("empty episode accepted")
+	}
 }

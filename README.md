@@ -1,6 +1,6 @@
 # 听宇 Tingyu
 
-An open-source macOS podcast client written in Go.
+An open-source macOS podcast client written in Go. It searches Podcast Index and iTunes, plays MP3 and M4A episodes from their RSS feeds, remembers where you stopped, and answers the media keys and Control Center. The interface is native UI drawn with [mygo](https://github.com/egoist/mygo): a night sky whose nebula takes the color of the show playing. The app and its docs are in Chinese.
 
 听宇是一个用纯 Go 写的 macOS 桌面播客客户端。界面使用 [mygo](https://github.com/egoist/mygo) 的原生 UI（不嵌网页），节目数据来自 [Podcast Index](https://podcastindex.org/) 和 iTunes：配了密钥时两边同时搜索并合并结果，没有密钥时只用 iTunes。
 
@@ -13,9 +13,31 @@ An open-source macOS podcast client written in Go.
 - 订阅和取消订阅，列表保存在本机
 - 查看一个节目的单集和简介，优先读它自己的 RSS。打开过的节目再打开时，先显示上次的单集列表，同时问 RSS 有没有更新；RSS 读不到时也用上次的列表，这样单集的身份和听到的位置不会变
 - 播放单集音频：播放、暂停、拖动进度、前后跳 15/30 秒、0.8×–2× 倍速，并记住每集听到哪里
+- 空格键播放和暂停（在搜索框里打字时除外）。键盘和耳机的播放键、控制中心和菜单栏的「正在播放」也能控制，上一首/下一首键是后退 15 秒/前进 30 秒
+- 侧栏的「最近播放」列出最近听的 6 集，重启后还在，点一下从上次的位置接着听
 - 在「正在播放」页里，封面化作一颗行星，外圈轨道显示进度，光晕随声音的响度起伏
 
-还没做：小宇宙同步、下载管理、账号。播放时会把音频缓存在数据目录里，方便拖动进度，这不是给用户看的下载列表。当前解码支持 MP3、M4A（MP4 里的 AAC，小宇宙的节目都是这种）和 WAV。M4A 用 macOS 自带的 AudioToolbox 解码：索引（`moov`）在文件开头时边下边播，小宇宙的文件就是这样；索引在末尾时要等下载完成。MP3 解码器首次打开时会扫描完整文件，因此可能需要等下载完成才开始播放；已完成的缓存可以复用。切换单集或退出时会取消旧下载，未完成的文件不会作为完整缓存保留。
+还没做，欢迎认领：
+
+- OPML 导入和导出，方便从别的客户端搬过来
+- 订阅的节目有新单集时提醒
+- 标记已听、未听；播完一集自动接下一集
+- 下载管理（离线收听）、小宇宙同步、账号
+- 签名和公证，现在的安装包没有签名，见下面「安装」
+
+播放时会把音频缓存起来，方便拖动进度和重听，这不是给用户看的下载列表。当前解码支持 MP3、M4A（MP4 里的 AAC，小宇宙的节目都是这种）和 WAV。M4A 用 macOS 自带的 AudioToolbox 解码：索引（`moov`）在文件开头时边下边播，小宇宙的文件就是这样；索引在末尾时要等下载完成。MP3 解码器首次打开时会扫描完整文件，因此可能需要等下载完成才开始播放；已完成的缓存可以复用。切换单集或退出时会取消旧下载，未完成的文件不会作为完整缓存保留。
+
+## 安装
+
+需要 macOS 13 或更高版本，Apple 芯片和 Intel 的 Mac 都可以。到 [Releases](https://github.com/renyijiu/tingyu/releases) 下载 `tingyu-<版本>.dmg`，打开后把「听宇」拖进「应用程序」。
+
+安装包没有用 Apple 的开发者证书签名，第一次打开时系统会提示无法验证开发者。打开「系统设置 → 隐私与安全性」，在下方找到听宇，点「仍要打开」。也可以在终端里去掉下载标记：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/听宇.app"
+```
+
+也可以按下面「在 Mac 上构建和运行」自己编译。
 
 ## 配置 Podcast Index
 
@@ -47,7 +69,7 @@ export PODCASTINDEX_API_SECRET="你的 secret"
 
 第一次启动时如果文件还不存在，应用会写一份空模板。密钥不要提交到仓库。
 
-订阅和播放进度在同一目录的 `library.json`。缓存都在其中的 `cache/` 里：音频直接放在 `cache/`；`cache/feeds/` 是每档节目上次的单集列表，保留最近打开的 60 档；`cache/covers/` 是缩小到 640 像素以内的封面，保留最近用到的 1000 张，约 80 MB。删掉 `cache/` 不会丢订阅和进度。用 `TINGYU_DATA_DIR` 可以改掉这个目录（测试时会用到）。
+订阅、播放进度和「最近播放」在同一目录的 `library.json`。缓存在 `~/Library/Caches/Tingyu`，Time Machine 不会备份它：音频直接放在里面，保留最近播放的约 2 GB，退出或崩溃时没下完的文件下次启动时清掉；`feeds/` 是每档节目上次的单集列表，保留最近打开的 60 档；`covers/` 是缩小到 640 像素以内的封面，保留最近用到的 1000 张，约 80 MB。删掉缓存不会丢订阅和进度。旧版本放在数据目录 `cache/` 里的缓存，启动时会搬过去。用 `TINGYU_DATA_DIR` 可以改掉数据目录，这时缓存在其中的 `cache/` 里（测试时会用到）。
 
 ## 在 Mac 上构建和运行
 
@@ -70,7 +92,9 @@ TINGYU_DATA_DIR="$HOME/Library/Application Support/Tingyu-Dev" go tool mygo dev
 go tool mygo build
 ```
 
-在 Mac 上，产物在 `build/darwin-<arch>/`，包括 `听宇.app` 和 dmg。发给别人用之前需要签名和公证，见 [mygo 的打包文档](https://mygo.egoist.dev/docs/distribution)。dmg 和签名只能在 macOS 上完成。
+在 Mac 上，产物在 `build/darwin-<arch>/`，包括 `听宇.app` 和 dmg；`-platform darwin/universal` 编出同时支持 Apple 芯片和 Intel 的版本，在 `build/darwin-universal/`。`resources/` 里的文件会放进 `.app` 的 `Contents/Resources`。不配置签名时 mygo 做的是临时签名（ad hoc），正式签名和公证见 [mygo 的打包文档](https://mygo.egoist.dev/docs/distribution)。dmg 和签名只能在 macOS 上完成。
+
+发版：把 `mygo.json` 和 `internal/version/version.go` 里的版本号一起改掉（有测试检查两处一致），提交后推一个同名的标签，比如 `v0.2.0`。[Release 工作流](.github/workflows/release.yml)会编出通用版的 dmg，建一个草稿 release，检查过说明后手动发布。
 
 其他系统也可以编出 macOS 的 `.app`（mygo 不需要 cgo）：
 
@@ -90,6 +114,12 @@ go build -o tingyu .
 go run ./tools/icon
 ```
 
+改了 `go.mod` 里的依赖后，重新生成随应用分发的第三方许可声明：
+
+```bash
+go run ./tools/notices
+```
+
 ## 测试与验收
 
 运行自动回归和静态检查：
@@ -99,7 +129,9 @@ go test -race ./...
 go vet ./...
 ```
 
-真实数据、原生窗口和异常播放的验证结果，以及隔离数据目录的手动复测步骤，见[首版验收记录](docs/testing/2026-10-28-v1-acceptance.md)。界面改版后的验证结果和需要人工检查的视觉项，见[界面改版验收记录](docs/testing/2026-10-28-ui-redesign.md)。小宇宙 M4A 播放的验证见 [M4A 播放验收记录](docs/testing/2026-10-28-m4a.md)。搜索合并、榜单、简介和缓存的验证见[数据源优化验收记录](docs/testing/2026-10-29-data-sources.md)。
+CI 还会检查 `gofmt`、用 govulncheck 查已知漏洞，并确认第三方许可声明是最新的。
+
+`docs/testing/` 是开发过程中的验收记录，写的是当时的代码和分支，留着是为了知道哪些在真实环境里验证过、哪些没有。真实数据、原生窗口和异常播放的验证结果，以及隔离数据目录的手动复测步骤，见[首版验收记录](docs/testing/2026-10-28-v1-acceptance.md)。界面改版后的验证结果和需要人工检查的视觉项，见[界面改版验收记录](docs/testing/2026-10-28-ui-redesign.md)。小宇宙 M4A 播放的验证见 [M4A 播放验收记录](docs/testing/2026-10-28-m4a.md)。搜索合并、榜单、简介和缓存的验证见[数据源优化验收记录](docs/testing/2026-10-29-data-sources.md)。
 
 界面测试用的渲染器没有 GPU，星云着色器和持续的动画不会运行；它们只能在真实窗口里检查。
 
@@ -112,18 +144,25 @@ go vet ./...
 | `internal/feed` | 用 gofeed 解析 RSS，支持条件请求（ETag、Last-Modified） |
 | `internal/catalog` | 搜索的并发和合并、单集的来源选择、单集列表的磁盘缓存 |
 | `internal/artwork` | 封面下载、缩小和磁盘缓存 |
-| `internal/store` | 订阅和播放进度的 JSON 文件 |
-| `internal/media` | 远端音频下载、可 seek 的文件读取和完整缓存复用 |
+| `internal/store` | 订阅、播放进度和最近播放的 JSON 文件 |
+| `internal/paths` | 数据目录和缓存目录在哪 |
+| `internal/media` | 远端音频下载、可 seek 的文件读取、完整缓存复用和容量上限 |
 | `internal/player` | 播放、暂停、进度记忆、按播放位置查询响度；音频引擎是接口 |
 | `internal/player/mygoengine` | 用 mygo `audio` 真正出声，解码时测量响度 |
 | `internal/player/mygoengine/m4a` | 通过 purego 调用 macOS AudioToolbox 解码 M4A（AAC），读到还没下载的部分时等待 |
+| `internal/nowplaying` | 控制中心的「正在播放」和键盘、耳机的媒体键 |
 | `internal/app` | 界面背后的状态 |
 | `internal/ui` | mygo 原生界面：星云背景着色器（`nebula.kage`）、图标、动效和各页面 |
 | `tools/icon` | 用界面里的标志绘制应用图标 `resources/icon.png`（`go run ./tools/icon`） |
+| `tools/notices` | 生成第三方许可声明 `resources/THIRD_PARTY_NOTICES.txt`（`go run ./tools/notices`） |
 | `main.go` | 把上面接起来，打开窗口 |
+
+## 参与
+
+欢迎提 issue 和 PR，先看看[参与说明](CONTRIBUTING.md)。
 
 ## 许可
 
-本仓库的代码使用 MIT 许可证。直接依赖的 mygo 和 gofeed 也是 MIT，可以一起用。缩小封面用的 `golang.org/x/image` 是 BSD 许可，mygo 本来就依赖它。播放 MP3 时会经过 mygo 带到 `github.com/hajimehoshi/go-mp3`，那个库是 Apache-2.0，只约束它自己的代码。
+本仓库的代码使用 MIT 许可证。随应用分发的 Go 标准库和各个依赖的许可原文都在 [`resources/THIRD_PARTY_NOTICES.txt`](resources/THIRD_PARTY_NOTICES.txt)，打包时会放进 `.app`。直接依赖的 mygo 和 gofeed 也是 MIT，可以一起用。缩小封面用的 `golang.org/x/image` 是 BSD 许可，mygo 本来就依赖它。播放 MP3 时会经过 mygo 带到 `github.com/hajimehoshi/go-mp3`，那个库是 Apache-2.0，只约束它自己的代码。
 
 M4A 解码直接依赖 `github.com/ebitengine/purego`，它是 Apache-2.0，mygo 本身也依赖它，同样只约束它自己的代码。真正解码的是 macOS 自带的 AudioToolbox，它是系统框架，不随应用分发，不带来新的许可条款。没有用纯 Go 的 AAC 解码库，是因为找到的几个都是 LGPL 或 GPL：Go 是静态链接的，和 MIT 的应用放在一起不方便。
