@@ -11,8 +11,18 @@ import (
 )
 
 func (v *View) sidebar(c *ui.Context, p palette, st player.State, reduce bool) {
+	// The panel sits below the window controls rather than under them, and
+	// keeps the same 10pt clear of the window's bottom edge as of its left.
+	// The strip above it is the title bar, so it drags the window.
 	bar := c.TitleBar()
-	panel := ui.Column(c).Width(244).Margin(10, 0, 0, 10).Radius(22).Padding(max(bar.Height, 10)+8, 10, 10, 10).Gap(2)
+	ui.Column(c).Padding(0, 0, 10, 10).Children(func() {
+		ui.Box(c).Height(max(bar.Height, 4) + 6).FillWidth().DragWindow()
+		v.sidebarPanel(c, p, st, reduce)
+	})
+}
+
+func (v *View) sidebarPanel(c *ui.Context, p palette, st player.State, reduce bool) {
+	panel := ui.Column(c).Width(244).Grow(1).Radius(22).Padding(18, 10, 10, 10).Gap(2)
 	panel.Material(glass.Glass{Clarity: 0.6})
 	panel.Children(func() {
 		v.brand(c, p)
