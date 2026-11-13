@@ -16,7 +16,7 @@ func (v *View) sidebar(c *ui.Context, p palette, st player.State, reduce bool) {
 	// The strip above it is the title bar, so it drags the window.
 	bar := c.TitleBar()
 	ui.Column(c).Padding(0, 0, 10, 10).Children(func() {
-		ui.Box(c).Height(max(bar.Height, 4)+6).FillWidth().DragWindow()
+		ui.Box(c).Height(max(bar.Height, 4) + 6).FillWidth().DragWindow()
 		v.sidebarPanel(c, p, st, reduce)
 	})
 }
