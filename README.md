@@ -73,7 +73,7 @@ export PODCASTINDEX_API_SECRET="你的 secret"
 
 ## 在 Mac 上构建和运行
 
-需要 Go 1.27.3 或更高版本。mygo 不使用 cgo，听宇也不用：M4A 解码像 mygo 的音频输出一样，通过 purego 调用系统的 AudioToolbox。
+需要 Go 1.27.4 或更高版本。mygo 不使用 cgo，听宇也不用：M4A 解码像 mygo 的音频输出一样，通过 purego 调用系统的 AudioToolbox。
 
 ```bash
 go test ./...
