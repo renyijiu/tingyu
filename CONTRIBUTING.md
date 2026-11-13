@@ -4,7 +4,7 @@
 
 ## 开始之前
 
-- 需要 Go 1.27.3 或更高版本和一台 Mac。`go tool mygo dev` 运行开发版，改了 Go 文件会自动重启。
+- 需要 Go 1.27.4 或更高版本和一台 Mac。`go tool mygo dev` 运行开发版，改了 Go 文件会自动重启。
 - 开发时最好用独立的数据目录，不碰自己真正的订阅：`TINGYU_DATA_DIR="$HOME/Library/Application Support/Tingyu-Dev" go tool mygo dev`。
 - 改界面前读一遍[界面设计说明](docs/design.md)：颜色、字号、动效和性能都有约定，界面测试也依赖其中列出的文字。
 
